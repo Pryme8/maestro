@@ -20,6 +20,34 @@ This is the foundation, built in phases 1 and 2.
 
 Clearing the machine frees memory, CPU and GPU for local work such as builds and local models. It does not make a cloud-hosted model answer faster, and the app does not claim it does.
 
+## Full control
+
+The goal is that nothing on the machine is hidden from you and nothing is out of your reach. For anything running, connected or powered, the app answers the same questions: what is it, what is responsible for it, what is it doing, how risky is it, and how do I stop, block or remove it.
+
+### Network: follow every connection
+
+If something on the PC is sending data to a server, you see the whole path in plain language.
+
+- **Who is talking:** every connection is tied to the process that opened it, the file on disk behind that process, who signed it, what started it and what makes it start at boot.
+- **Where it goes:** the remote address, its domain, the organisation that owns it and its approximate location on a map, with the network hops in between where they answer.
+- **What it is doing:** how much it sends and receives, how often, to which domains, and over which protocol.
+- **How risky it is:** unsigned or tampered files, unusual locations on disk, unknown destinations and odd timing raise the risk shown. A file's fingerprint can be checked against public reputation services if you opt in.
+- **What you can do:** end the process, block the destination or the whole program at the firewall, disable what restarts it, and quarantine or remove the file. Each action is explained before it runs and can be undone.
+
+### Hardware: control what the machine exposes
+
+- **Devices:** every device, what it draws where that is reported, and the driver behind it, with enable and disable.
+- **Lighting and fans:** case and component LEDs, and fan speeds, through the controllers that expose them.
+- **Power:** per-port USB power and device sleep states where the hardware supports switching them.
+
+### Limits on full control
+
+- **Encrypted traffic:** most traffic is encrypted. The app shows who is talking to whom, how much and when, but not the contents. Reading contents would mean intercepting the machine's own encryption, which weakens security and breaks some apps, so it is not planned by default.
+- **Location is approximate:** an address maps to its registered owner and a rough location. Content networks, VPNs and proxies can hide where data really ends up, and many hops do not answer.
+- **Not an antivirus:** the risk shown is a guide built from visible signs. Malware that hides inside the operating system's core can hide from any tool running above it, including this one.
+- **Hardware without a controller:** software can only switch what has a controllable interface. An LED wired straight to a power rail cannot be turned off from software, and PCs do not report a map of their internal power routes. The app controls everything that is exposed and says plainly what is not.
+- **Removal can break things:** removing a file another program depends on can damage it. Removal is quarantine first, delete later.
+
 ## The router layer
 
 The router layer picks which AI account and model handles each step of a task, then hands the work between them. It sits on top of the agent layer and is planned as phase 5, after a standalone trial of the ledger and advisor.

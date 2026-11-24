@@ -15,6 +15,8 @@ Maestro is that agent-centric environment. It runs on top of your existing opera
 - **Monitors the whole system.** Processes, memory, CPU, GPU, disk and network, shown as a base you can read at a glance instead of a table of numbers.
 - **Clears the machine for the task.** For each task it works out what needs to run, then suspends or stops everything else, with undo. Processes the operating system needs are never touched.
 - **Manages what is running.** Every process, connection and adapter can be inspected and controlled from one interface, replacing the resource manager.
+- **Follows every connection.** If a program is sending data somewhere, you see which file is responsible, where the data goes on a map, how risky it looks, and how to stop it, block it or remove it.
+- **Controls the hardware it can reach.** Devices, case lighting, fans and port power, wherever the hardware exposes a control.
 - **Treats agents as first-class.** It recognises AI agents, shows what each one is doing and what it costs, and presents them as crew you assign to work.
 - **Routes and relays work between agents.** A ledger of every AI account, an advisor that suggests the cheapest route for a task, and a relay that hands work from one agent to the next.
 - **Gives agents a managed environment.** A WSL2, VM or container image with the toolchain preinstalled, recorded paths and snapshots, so unattended runs cannot touch the rest of your machine.
@@ -24,6 +26,8 @@ The full plan, including what Maestro cannot do, is in [docs/plan.md](docs/plan.
 ## What it will not claim
 
 - Shutting down unneeded processes frees memory, CPU and GPU for local work such as builds and local models. It does not make a cloud-hosted model answer faster.
+- It shows who a program talks to, how much and when, but not the contents of encrypted traffic.
+- It is not an antivirus, and it can only switch hardware that exposes a control.
 - It cannot measure answer quality. "Best route" means cheapest within your rules.
 - Subscription quota figures are estimates, because vendors do not expose them exactly.
 - A relay for a vendor only gets built if that vendor's terms allow it.
