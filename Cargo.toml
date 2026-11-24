@@ -1,0 +1,21 @@
+[package]
+name = "maestro"
+version = "0.1.0"
+description = "An agent-centric replacement for the resource manager"
+license = "MIT"
+edition = "2021"
+rust-version = "1.84"
+resolver = "3"
+
+[dependencies]
+eframe = "0.31"
+image = { version = "0.25", default-features = false, features = ["png"] }
+netstat2 = "0.11"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sysinfo = "0.33"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

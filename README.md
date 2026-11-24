@@ -2,7 +2,7 @@
 
 Maestro is a planned replacement for the resource manager and the everyday operating-system interfaces, built for a machine whose main job is running AI agents. It shows everything running on your PC, shuts down whatever the current task does not need, and gives you one visual, manageable place to direct the agents doing the work.
 
-**Status: plan only. No code exists yet.** This repo is public from day one so the design, the doubts and the decisions are all in the open.
+**Status: phase 1 is running.** The app is a native Windows program that reads the machine and draws it. It is read-only: it cannot stop, block or change anything yet. This repo is public from day one so the design, the doubts and the decisions are all in the open.
 
 ## The vision
 
@@ -22,6 +22,32 @@ Maestro is that agent-centric environment. It runs on top of your existing opera
 - **Gives agents a managed environment.** A WSL2, VM or container image with the toolchain preinstalled, recorded paths and snapshots, so unattended runs cannot touch the rest of your machine.
 
 The full plan, including what Maestro cannot do, is in [docs/plan.md](docs/plan.md).
+
+## What works today
+
+- **The base:** processor load per core, memory, disks and network, updated every second.
+- **Everything running:** every process, grouped by program, with its processor share, memory, disk writes, the file on disk behind it and what started it.
+- **Every socket:** each open network socket is tied to the process that owns it, with the remote address and port.
+- **Four views of the same data:** tiles, a heat map sized by memory and coloured by load, a tree of what started what, and a map that joins programs to the programs they started.
+- **A first sorting of processes:** critical to Windows, part of Windows, background service, or app. A process using a critical Windows name from outside the Windows folder is flagged. This is judged from names, file locations and parentage; signatures are not checked yet.
+
+Not there yet: graphics load, hostnames and locations for connections, signature checks, and every control. See the plan for the order.
+
+## Build and run
+
+Maestro is written in Rust with [egui](https://github.com/emilk/egui). It is a single native program with no web view. You need a [Rust toolchain](https://rustup.rs), version 1.84 or newer.
+
+```
+cargo run --release
+```
+
+Other ways to start it:
+
+- `cargo run -- --view heat` opens on a chosen view: `tiles`, `heat`, `tree` or `mold`.
+- `cargo run -- --dump` prints one sample of the machine as JSON and exits, without opening a window.
+- `cargo run -- --screenshot shot.png` opens the window, saves one picture of it and exits.
+
+It is built and tested on Windows 11. Linux and macOS are planned for phase 4 and are untested.
 
 ## What it will not claim
 

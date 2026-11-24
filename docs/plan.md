@@ -1,12 +1,14 @@
 # Maestro: plan
 
-As of 2026-11-24. Nothing is built yet.
+As of 2026-11-24. Phase 1 is running in a first, read-only form. Nothing after it is built.
 
 ## Vision
 
 Maestro replaces the resource manager and the everyday operating-system interfaces with an agent-centric environment. It is first a system resource monitor: it shows everything running on the PC, shuts down every process the current task does not need, and gives you a visual, manageable interface to what is left. Agents and the routing of work between them are built on that base.
 
 It runs on top of the existing operating system and takes over the interfaces you use to see and manage it. It has three layers: the system monitor and its controls, the agent monitor, and the agent router.
+
+It is a native program written in Rust with egui, as one executable with no web view. A tool whose job is to free the machine should not bring a browser engine with it.
 
 ## The system monitor
 
@@ -17,6 +19,8 @@ This is the foundation, built in phases 1 and 2.
 - **Undo:** every stop is reversible. Ending a task restores what was running before it.
 - **Protected processes:** processes the operating system needs are never stopped, and you can pin anything else you want kept.
 - **Controls:** process, network and adapter actions from one interface, replacing the resource manager.
+- **Many views of the same data:** no single picture suits every question, so the running programs can be drawn several ways. Built so far: tiles, a heat map sized by memory and coloured by load, a tree of what started what, and a map that joins programs to the programs they started. More views are welcome wherever they help a person understand and control what is going on.
+- **Critical or extra:** every process is sorted in plain words: critical to Windows, part of Windows, background service, or app. A process using a critical Windows name from outside the Windows folder is flagged. Today this is judged from names, file locations and parentage. Signature checks come next, and this sorting is what task profiles will use to decide what is safe to stop.
 
 Clearing the machine frees memory, CPU and GPU for local work such as builds and local models. It does not make a cloud-hosted model answer faster, and the app does not claim it does.
 
@@ -38,7 +42,7 @@ If something on the PC is sending data to a server, you see the whole path in pl
 
 - **Devices:** every device, what it draws where that is reported, and the driver behind it, with enable and disable.
 - **Lighting and fans:** case and component LEDs, and fan speeds, through the controllers that expose them.
-- **Power:** per-port USB power and device sleep states where the hardware supports switching them.
+- **Power:** device enable and disable, and device sleep states. Windows gives programs no way to hold a single USB port switched off, so per-port power is not promised there.
 
 ### Limits on full control
 
@@ -47,6 +51,8 @@ If something on the PC is sending data to a server, you see the whole path in pl
 - **Not an antivirus:** the risk shown is a guide built from visible signs. Malware that hides inside the operating system's core can hide from any tool running above it, including this one.
 - **Hardware without a controller:** software can only switch what has a controllable interface. An LED wired straight to a power rail cannot be turned off from software, and PCs do not report a map of their internal power routes. The app controls everything that is exposed and says plainly what is not.
 - **Removal can break things:** removing a file another program depends on can damage it. Removal is quarantine first, delete later.
+
+Each of these limits has been researched, with what can be done about it now, what needs elevated rights or an opt-in component, and what stays impossible. See [research/blockers.md](research/blockers.md). That file is desk research: nothing in it has been tested on a machine yet, and it marks which sources were read in full.
 
 ## The router layer
 
