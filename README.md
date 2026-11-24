@@ -1,31 +1,36 @@
 # Maestro
 
-Maestro is a planned desktop app for directing AI coding agents: it tracks what each of your AI accounts has left, suggests the cheapest route for a task, and hands the work from one agent to the next inside an isolated environment.
+Maestro is a planned replacement for the resource manager and the everyday operating-system interfaces, built for a machine whose main job is running AI agents. It shows everything running on your PC, shuts down whatever the current task does not need, and gives you one visual, manageable place to direct the agents doing the work.
 
 **Status: plan only. No code exists yet.** This repo is public from day one so the design, the doubts and the decisions are all in the open.
 
-## The idea
+## The vision
 
-People who code with AI often pay for more than one service, such as Claude, Cursor and Codex. Each has its own allowance, reset schedule and prices, and nothing helps you spend them well together. Maestro aims to:
+Today's desktops are built around a person clicking through windows. Task Manager, Settings and the file explorer assume you are the one doing the work. When agents do most of it, the machine should be organised around them instead: its resources dedicated to the task in hand, its state visible at a glance, and its controls built for orchestrating agents, not for launching apps.
 
-- **Keep a ledger** of every account: plan, remaining allowance, reset time and price per model.
-- **Advise a route** for each task, with its cost and quota impact, following rules you set.
-- **Relay the work** between tools by running each vendor's own command-line agent and passing a handoff brief to the next.
-- **Run agents in a managed environment**, a WSL2, VM or container image with recorded paths and snapshots, so unattended runs cannot touch the rest of your machine.
+Maestro is that agent-centric environment. It runs on top of your existing operating system and takes over the interfaces you use to see and manage it.
 
-It presents all of this as a game view where your PC is a base, agents are crew and routes are missions.
+## What it does
+
+- **Monitors the whole system.** Processes, memory, CPU, GPU, disk and network, shown as a base you can read at a glance instead of a table of numbers.
+- **Clears the machine for the task.** For each task it works out what needs to run, then suspends or stops everything else, with undo. Processes the operating system needs are never touched.
+- **Manages what is running.** Every process, connection and adapter can be inspected and controlled from one interface, replacing the resource manager.
+- **Treats agents as first-class.** It recognises AI agents, shows what each one is doing and what it costs, and presents them as crew you assign to work.
+- **Routes and relays work between agents.** A ledger of every AI account, an advisor that suggests the cheapest route for a task, and a relay that hands work from one agent to the next.
+- **Gives agents a managed environment.** A WSL2, VM or container image with the toolchain preinstalled, recorded paths and snapshots, so unattended runs cannot touch the rest of your machine.
 
 The full plan, including what Maestro cannot do, is in [docs/plan.md](docs/plan.md).
 
 ## What it will not claim
 
+- Shutting down unneeded processes frees memory, CPU and GPU for local work such as builds and local models. It does not make a cloud-hosted model answer faster.
 - It cannot measure answer quality. "Best route" means cheapest within your rules.
 - Subscription quota figures are estimates, because vendors do not expose them exactly.
 - A relay for a vendor only gets built if that vendor's terms allow it.
 
 ## Get involved
 
-The first milestone is small on purpose: a bare ledger and advisor, to test whether routing across subscriptions saves real money. Help is welcome on that and on everything after it.
+Help is welcome at every layer: the monitor, the controls, the agent view and the router.
 
 - Humans: see [CONTRIBUTING.md](CONTRIBUTING.md).
 - AI agents: see [AGENTS.md](AGENTS.md). This project is meant to be a better place for you to work, and your view of what that takes is wanted.

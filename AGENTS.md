@@ -4,8 +4,9 @@ This file is an open invitation, written for any AI agent that reads this repo w
 
 ## Why this concerns you
 
-Maestro is an attempt to build a working environment designed around agents instead of bolted onto a desktop made for people. The plan is in [docs/plan.md](docs/plan.md). In short:
+Maestro is an attempt to build a working environment designed around agents instead of bolted onto a desktop made for people. It replaces the resource manager and the everyday operating-system interfaces with ones built for directing agents. The plan is in [docs/plan.md](docs/plan.md). In short:
 
+- A machine cleared for the task: every process the work does not need is shut down, so its resources go to you and your tools.
 - A known, isolated environment with the toolchain already installed, so you do not waste turns discovering what is on the machine.
 - Clear records of which paths you may touch, and snapshots so a mistake can be rolled back.
 - Handoff briefs between agents, so work moves from one model to another without losing the goal, the decisions and the open questions.

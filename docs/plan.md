@@ -2,7 +2,27 @@
 
 As of 2026-11-24. Nothing is built yet.
 
-Maestro is a desktop app in three layers: a PC scanner, an agent monitor and an agent router. The router layer picks which AI account and model handles each step of a task, then hands the work between them. It sits on top of the agent layer and is planned as phase 5, after a standalone trial of the ledger and advisor.
+## Vision
+
+Maestro replaces the resource manager and the everyday operating-system interfaces with an agent-centric environment. It is first a system resource monitor: it shows everything running on the PC, shuts down every process the current task does not need, and gives you a visual, manageable interface to what is left. Agents and the routing of work between them are built on that base.
+
+It runs on top of the existing operating system and takes over the interfaces you use to see and manage it. It has three layers: the system monitor and its controls, the agent monitor, and the agent router.
+
+## The system monitor
+
+This is the foundation, built in phases 1 and 2.
+
+- **Monitor:** processes, memory, CPU, GPU, disk and network, read-only at first, shown in the game style as a base.
+- **Task profiles:** for each task, the app works out what needs to run. Everything else is suspended or stopped so the machine's resources go to the task.
+- **Undo:** every stop is reversible. Ending a task restores what was running before it.
+- **Protected processes:** processes the operating system needs are never stopped, and you can pin anything else you want kept.
+- **Controls:** process, network and adapter actions from one interface, replacing the resource manager.
+
+Clearing the machine frees memory, CPU and GPU for local work such as builds and local models. It does not make a cloud-hosted model answer faster, and the app does not claim it does.
+
+## The router layer
+
+The router layer picks which AI account and model handles each step of a task, then hands the work between them. It sits on top of the agent layer and is planned as phase 5, after a standalone trial of the ledger and advisor.
 
 It can be exact about cost on API-billed accounts, can only estimate subscription quota, and cannot measure answer quality. "Optimal" therefore means the cheapest route that follows rules you set.
 
@@ -32,7 +52,7 @@ Relays run inside an environment image the app manages, not on your desktop. Age
 - **Image:** a WSL2 distro first, then a VM or dev container, with the coding toolchain and each vendor's command-line agent preinstalled. You sign in to each tool inside it once.
 - **Recorded paths:** only the folders you mount are visible inside, and the app records which ones each route uses.
 - **Snapshots:** the app takes a snapshot before each relay, so a bad run can be rolled back.
-- **Not an operating system:** a boot-into system was considered and dropped. The work is network-bound, so it would gain little speed and would mean maintaining a Linux distribution. A bootable USB version of the same image is a possible later step.
+- **Not a separate operating system:** Maestro replaces the interfaces of the operating system you already run, not the system underneath. A boot-into system was considered and dropped for now, because it would mean maintaining a Linux distribution. A bootable USB version of the same image is a possible later step.
 
 ## In the game
 
@@ -46,8 +66,8 @@ In the app's game view, where the PC is a base and agents are crew, routes appea
 
 The router is phase 5, but a bare ledger and advisor are trialled first as a standalone tool. Its payoff is quota arbitrage for people with two or more subscriptions, and a few days of trial can confirm that before the other phases are committed.
 
-1. **Scanner and base:** read-only system telemetry, in the game style.
-2. **Controls:** process, network and adapter actions, with undo.
+1. **Monitor and base:** read-only system telemetry, in the game style.
+2. **Controls:** task profiles that stop what a task does not need, plus process, network and adapter actions, all with undo.
 3. **Agents:** recogniser, telemetry receiver, crew, quests and budgets.
 4. **Depth:** timeline, achievements, account totals, then Linux and macOS.
 5. **Router:** the advisor first, since it only needs the ledger, then the managed environment and the relay. It depends on phase 3 only, so it can move ahead of phases 1, 2 and 4 if the trial pays off.
