@@ -21,7 +21,7 @@ Maestro is that agent-centric environment. It runs on top of your existing opera
 - **Routes and relays work between agents.** A ledger of every AI account, an advisor that suggests the cheapest route for a task, and a relay that hands work from one agent to the next.
 - **Gives agents a managed environment.** A WSL2, VM or container image with the toolchain preinstalled, recorded paths and snapshots, so unattended runs cannot touch the rest of your machine.
 
-The full plan, including what Maestro cannot do, is in [docs/plan.md](docs/plan.md).
+The full plan, including what each hard part takes, is in [docs/plan.md](docs/plan.md).
 
 ## What works today
 
@@ -46,6 +46,7 @@ Other ways to start it:
 - `cargo run -- --view heat` opens on a chosen view: `tiles`, `heat`, `tree` or `mold`.
 - `cargo run -- --dump` prints one sample of the machine as JSON and exits, without opening a window.
 - `cargo run -- --screenshot shot.png` opens the window, saves one picture of it and exits.
+- `cargo run --release -- --profile` times each part of a sample, to show what the monitor itself costs.
 
 It is built and tested on Windows 11. Linux and macOS are planned for phase 4 and are untested.
 

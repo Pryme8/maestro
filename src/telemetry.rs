@@ -5,7 +5,9 @@
 use netstat2::{get_sockets_info, AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo};
 use serde::Serialize;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use sysinfo::{Disks, Networks, ProcessesToUpdate, System};
+#[cfg(not(windows))]
+use sysinfo::ProcessesToUpdate;
+use sysinfo::{CpuRefreshKind, Disks, Networks, System};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,6 +106,11 @@ pub struct Conn {
 pub struct Sampler {
     #[cfg(windows)]
     core_times: Vec<wincpu::CoreTimes>,
+    #[cfg(windows)]
+    procs: crate::winproc::Reader,
+    /// Processor name and logical core count, read once at start.
+    brand: String,
+    cores: usize,
     sys: System,
     disks: Disks,
     networks: Networks,
@@ -113,17 +120,67 @@ pub struct Sampler {
 impl Sampler {
     pub fn new() -> Self {
         let mut sys = System::new();
+        // List the cores without asking for their load: on Windows the load
+        // query can take seconds per call, and core times are read directly.
+        sys.refresh_cpu_list(CpuRefreshKind::nothing());
+        let brand = sys
+            .cpus()
+            .first()
+            .map(|c| c.brand().trim().to_string())
+            .unwrap_or_default();
+        let cores = sys.cpus().len().max(1);
+        #[cfg(not(windows))]
         sys.refresh_cpu_usage();
         sys.refresh_memory();
+        #[cfg(not(windows))]
         sys.refresh_processes(ProcessesToUpdate::All, true);
         Self {
             #[cfg(windows)]
             core_times: wincpu::read(),
+            #[cfg(windows)]
+            procs: crate::winproc::Reader::new(),
+            brand,
+            cores,
             sys,
             disks: Disks::new_with_refreshed_list(),
             networks: Networks::new_with_refreshed_list(),
             last: Instant::now(),
         }
+    }
+
+    /// Time each part of a sample, in milliseconds. Used by `--profile` to see
+    /// what the monitor itself costs.
+    pub fn profile(&mut self) -> Vec<(&'static str, f64)> {
+        fn timed(name: &'static str, out: &mut Vec<(&'static str, f64)>, f: impl FnOnce()) {
+            let start = Instant::now();
+            f();
+            out.push((name, start.elapsed().as_secs_f64() * 1000.0));
+        }
+        let mut out = Vec::new();
+        #[cfg(not(windows))]
+        timed("cpu", &mut out, || self.sys.refresh_cpu_usage());
+        #[cfg(windows)]
+        timed("cpu", &mut out, || {
+            wincpu::read();
+        });
+        timed("memory", &mut out, || self.sys.refresh_memory());
+        #[cfg(not(windows))]
+        timed("processes", &mut out, || {
+            self.sys.refresh_processes(ProcessesToUpdate::All, true);
+        });
+        #[cfg(windows)]
+        timed("processes", &mut out, || {
+            self.procs.read(1.0, 1.0);
+        });
+        timed("disks", &mut out, || self.disks.refresh(true));
+        timed("networks", &mut out, || self.networks.refresh(true));
+        timed("sockets", &mut out, || {
+            connections();
+        });
+        timed("whole sample", &mut out, || {
+            self.sample();
+        });
+        out
     }
 
     pub fn sample(&mut self) -> Snapshot {
@@ -132,13 +189,15 @@ impl Sampler {
         // Guard the first call and very fast repeat calls against dividing by ~0.
         let secs = elapsed.as_secs_f64().max(0.05);
 
+        #[cfg(not(windows))]
         self.sys.refresh_cpu_usage();
         self.sys.refresh_memory();
+        #[cfg(not(windows))]
         self.sys.refresh_processes(ProcessesToUpdate::All, true);
         self.disks.refresh(true);
         self.networks.refresh(true);
 
-        let cores = self.sys.cpus().len().max(1) as f32;
+        let cores = self.cores as f32;
 
         #[cfg(not(windows))]
         let (total_percent, core_percent) = (
@@ -156,12 +215,7 @@ impl Sampler {
         };
 
         let cpu = Cpu {
-            brand: self
-                .sys
-                .cpus()
-                .first()
-                .map(|c| c.brand().trim().to_string())
-                .unwrap_or_default(),
+            brand: self.brand.clone(),
             total_percent,
             core_percent,
         };
@@ -198,7 +252,10 @@ impl Sampler {
             .collect();
         networks.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let processes = self
+        #[cfg(windows)]
+        let processes = self.procs.read(secs, cores);
+        #[cfg(not(windows))]
+        let processes: Vec<Proc> = self
             .sys
             .processes()
             .iter()

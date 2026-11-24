@@ -4,6 +4,8 @@
 mod classify;
 mod telemetry;
 mod ui;
+#[cfg(all(windows, target_pointer_width = "64"))]
+mod winproc;
 
 use eframe::egui;
 use std::path::PathBuf;
@@ -23,6 +25,19 @@ fn main() -> eframe::Result<()> {
             "{}",
             serde_json::to_string_pretty(&snap).expect("snapshot serialises")
         );
+        return Ok(());
+    }
+
+    // `--profile` times each part of a sample, to see what the monitor itself costs.
+    if args.iter().any(|a| a == "--profile") {
+        let mut sampler = telemetry::Sampler::new();
+        for round in 1..=3 {
+            sleep(Duration::from_millis(1000));
+            println!("round {round}");
+            for (name, ms) in sampler.profile() {
+                println!("  {name:<14}{ms:>8.1} ms");
+            }
+        }
         return Ok(());
     }
 

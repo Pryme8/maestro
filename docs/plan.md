@@ -42,17 +42,19 @@ If something on the PC is sending data to a server, you see the whole path in pl
 
 - **Devices:** every device, what it draws where that is reported, and the driver behind it, with enable and disable.
 - **Lighting and fans:** case and component LEDs, and fan speeds, through the controllers that expose them.
-- **Power:** device enable and disable, and device sleep states. Windows gives programs no way to hold a single USB port switched off, so per-port power is not promised there.
+- **Power:** device enable and disable, and device sleep states. Holding a single USB port switched off takes a hub that supports per-port switching plus a driver-level route, because Windows offers programs no call for it.
 
-### Limits on full control
+### What full control takes
 
-- **Encrypted traffic:** most traffic is encrypted. The app shows who is talking to whom, how much and when, but not the contents. Reading contents would mean intercepting the machine's own encryption, which weakens security and breaks some apps, so it is not planned by default.
-- **Location is approximate:** an address maps to its registered owner and a rough location. Content networks, VPNs and proxies can hide where data really ends up, and many hops do not answer.
-- **Not an antivirus:** the risk shown is a guide built from visible signs. Malware that hides inside the operating system's core can hide from any tool running above it, including this one.
-- **Hardware without a controller:** software can only switch what has a controllable interface. An LED wired straight to a power rail cannot be turned off from software, and PCs do not report a map of their internal power routes. The app controls everything that is exposed and says plainly what is not.
-- **Removal can break things:** removing a file another program depends on can damage it. Removal is quarantine first, delete later.
+Nothing here is off the table. Each hard part has a route, and the route has a cost. The plan takes the cheap routes first and names the price of the rest.
 
-Each of these limits has been researched, with what can be done about it now, what needs elevated rights or an opt-in component, and what stays impossible. See [research/blockers.md](research/blockers.md). That file is desk research: nothing in it has been tested on a machine yet, and it marks which sources were read in full.
+- **Reading encrypted traffic:** the first step shows who is talking to whom, how much and when, plus hostnames from the system's own name lookups. Reading the contents takes an opt-in inspection mode per app: either the app's own key log, or a local intercepting proxy with a certificate you install. Apps that pin their certificates need a deeper hook into the app itself.
+- **Pinpointing where data goes:** the first step maps an address to its owner and a rough location. Getting closer takes route tracing, latency checks and marking content networks, VPNs and proxies for what they are. Seeing past a VPN or proxy takes information from the far side.
+- **Catching malware that hides:** the first step uses Windows' own signature checks and Defender, plus cross-checks that flag inconsistencies. Seeing beneath a compromised system core takes a signed kernel driver, which means a code-signing certificate and Microsoft's hardware program, or a scan from outside the running system.
+- **Switching hardware with no controller:** the first step controls everything that exposes a control: lighting, fans, devices. An LED wired straight to a power rail takes a hardware change: move it to an addressable header or a supported controller, or fit a switched line. PCs do not report their internal power routes, so mapping them takes a per-board description that the community can build up.
+- **Removing files safely:** removing a file another program depends on can damage it, so removal is quarantine first, delete later.
+
+Each route has been researched, with what can be done now, what takes elevated rights or an opt-in component, and what takes a driver or hardware. See [research/blockers.md](research/blockers.md). That file is desk research: nothing in it has been tested on a machine yet, and it marks which sources were read in full.
 
 ## The router layer
 
