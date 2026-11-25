@@ -25,6 +25,7 @@ Maestro shows everything running on your computer, lets you pause, end or block 
 ## Reference
 
 - [Data and privacy](data-and-privacy.md): the files Maestro keeps, what it reads, and what leaves your computer.
+- [Security](../SECURITY.md): the rules Maestro keeps, how they are checked, and how to report a problem privately.
 - [Releasing](releasing.md): how a release is made, for maintainers.
 
 ## About the project

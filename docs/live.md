@@ -42,6 +42,23 @@ Each session can be shown as a map or as a list.
 
 Hover anything for the detail. The step list stays underneath the map, and the **List** switch shows the list alone.
 
+## A safe copy that can be rolled back
+
+The start form has a box, ticked by default: **Work in a safe copy that can be rolled back**. With it ticked, the session does not work in your folder. Maestro cuts a [work](environment.md#works) from the repository there, which is a separate copy on its own branch, `maestro/<name>`, named from the first words of your request. It takes a snapshot of the copy and starts the session in it. Your own checkout is not touched.
+
+- **The folder must be the top of a git repository with at least one commit.** Otherwise untick the box, and the session works in the folder itself.
+- **Changes you have not committed are not carried into the copy.** The session sees your last commit.
+- The folder is recorded as one the [managed environment](environment.md) may see, if it was not already.
+- Starting a session in a work that already exists always takes a new snapshot first.
+
+For such a session the page shows the copy, its branch and the snapshot, with three buttons:
+
+- **What has it changed?** lists the files that differ from the snapshot: new, changed and deleted.
+- **Roll back…** puts the copy back to the snapshot, after a second click to confirm. It is only offered once the session has stopped, and it also undoes commits the session made.
+- **Keep as a commit** commits everything to the copy's branch. Bringing that branch into your own checkout is left to you, with git.
+
+A copy protects your files, not your machine: it is still a folder on this computer, and a command the session is allowed to run can reach outside it. That is what [approving each step](#approving-each-step) is for.
+
 ## Approving each step
 
 A session started from Maestro asks before every step that needs permission, such as changing a file or running a command Claude Code does not already treat as harmless. The question appears above the controls in an amber box and the session's chip shows "needs you".
@@ -95,6 +112,7 @@ A program started from the macOS Finder or Dock does not get the `PATH` your ter
 - `--services` prints each tool's state, how it was checked and what to do about it.
 - `--watch` prints what your Claude Code sessions are doing as it happens. `--watch-once` prints their latest steps and exits.
 - `--logins` lists the named sign-ins and whether each is ready. `--login-add <name>` adds one, with `--key-var <VARIABLE>` for one that uses an API key, and `--login-forget <name>` takes one off the list.
+- `--run <folder> "<request>" --safe` runs in a safe copy as above, then prints what changed and the `--work-rollback` line that undoes it.
 - `--run` takes `--as <name>` to run under a named sign-in and `--model <name>` to pick the model.
 - `--run <folder> "<request>"` starts Claude Code in that folder, read-only, and prints each step until it answers. Add `--answer refuse` or `--answer allow` to have it ask before each step that needs permission and give every question that same answer. `--answer allow` lets it change files and run commands unasked, so use it only in a folder you can throw away.
 

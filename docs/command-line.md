@@ -54,6 +54,7 @@ These follow the same locks as the buttons: see [Controls](controls.md#guard-rai
 | `--watch` | Prints what your Claude Code sessions are doing as it happens |
 | `--watch-once` | Prints their latest steps and exits |
 | `--run <folder> "<request>"` | Starts Claude Code in that folder, read-only, and prints each step until it answers |
+| `--run … --safe` | Runs in a safe copy of the repository in that folder, with a snapshot taken first. Prints what changed and the `--work-rollback <name> <snapshot>` line that undoes it |
 | `--run … --model <name>` | Picks the model for that run: a short name such as `haiku`, or a full model name |
 | `--run … --as <name>` | Runs under a named sign-in instead of Claude Code's own |
 | `--logins` | Lists the named sign-ins, whether each is ready, and its folder |

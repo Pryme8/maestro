@@ -30,7 +30,7 @@ Maestro is that agent-centric environment. It runs on top of your existing opera
 | **[Controls](docs/controls.md)** | Pause, resume and end a program or everything it started. Clear the machine for a task, with a preview and saved profiles. Block a program on the network and switch an adapter off. An action log with undo. Critical processes are locked, and nothing is ever left frozen. |
 | **[Network](docs/network.md)** | Every connection under the program that opened it, with the name and owner behind each address, and every listening port with whether other computers can reach it. |
 | **[Agents](docs/agents.md)** | Claude Code, Cursor, Codex, Copilot, Gemini CLI, Ollama and others recognised by themselves, with the helpers they start counted in. Usage reports, daily budgets and quests. |
-| **[Live](docs/live.md)** | Watch any Claude Code session step by step. Start one, approve or refuse each step it asks to take, send it messages, interrupt it, pause it or stop it. Keep several Claude Code sign-ins apart, such as work and personal, and pick the account and model per session. A map of what each session touched, and the state of each agent tool with the step that fixes what is missing. |
+| **[Live](docs/live.md)** | Watch any Claude Code session step by step. Start one in a safe copy of your repository that can be rolled back, approve or refuse each step it asks to take, send it messages, interrupt it, pause it or stop it. Keep several Claude Code sign-ins apart, such as work and personal, and pick the account and model per session. A map of what each session touched, and the state of each agent tool with the step that fixes what is missing. |
 | **[Timeline](docs/timeline.md)** | A day of history, every event, what each agent reported spending, and thirteen achievements. |
 | **[Router](docs/router.md)** | A ledger of your AI accounts and an advisor that proposes the cheapest route for a task. The relay that would run a route only prints its plan. |
 | **[Managed environment](docs/environment.md)** | From the command line: recorded folders, git worktrees with snapshots and rollback. It does not isolate anything yet. |
@@ -74,6 +74,8 @@ The macOS column needs someone with a Mac: the code was written from documentati
 
 Maestro has no account and sends nothing to its authors. What it records is kept in one folder on your computer. The only thing that reaches a network by itself is a name lookup for addresses on the Network page, which goes to the DNS server your system already uses and can be switched off. See [docs/data-and-privacy.md](docs/data-and-privacy.md).
 
+Maestro runs with your rights and sits beside your AI tools' sign-ins, so the rules it keeps are written down and checked by tests on every change. [SECURITY.md](SECURITY.md) has the rules and how to report a problem privately.
+
 ## What it will not claim
 
 - Shutting down unneeded processes frees memory, CPU and GPU for local work such as builds and local models. It does not make a cloud-hosted model answer faster.
@@ -88,6 +90,7 @@ Maestro has no account and sends nothing to its authors. What it records is kept
 Help is welcome at every layer: the monitor, the controls, the agent view and the router.
 
 - Humans: see [CONTRIBUTING.md](CONTRIBUTING.md).
+- Found a security problem? Report it privately: see [SECURITY.md](SECURITY.md).
 - AI agents: see [AGENTS.md](AGENTS.md). This project is meant to be a better place for you to work, and your view of what that takes is wanted.
 
 ## License

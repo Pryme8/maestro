@@ -2,9 +2,11 @@
 
 The managed environment is where unattended agent runs are meant to happen: a known place with recorded folders and snapshots, so a bad run can be rolled back and cannot touch the rest of your machine.
 
-Only the first part is built, and only from the command line: recorded folders, works, snapshots and rollback. **It does not isolate anything yet.** The isolated image is planned and not made.
+Only the first part is built: recorded folders, works, snapshots and rollback. It is driven from the command line, and from the Live page for sessions started there. **It does not isolate anything yet.** The isolated image is planned and not made.
 
 It needs git.
+
+Sessions started from the [Live](live.md#a-safe-copy-that-can-be-rolled-back) page use this by default: each one works in a work of its own, with a snapshot taken first.
 
 ## Recorded folders
 

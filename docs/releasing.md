@@ -16,6 +16,8 @@ It also writes `SHA256SUMS.txt`.
 
 The Linux download is built on Ubuntu 22.04 so that it runs on that version and newer. It will not run on systems with an older C library.
 
+Every action the workflows use is pinned to a full commit, with the version in a comment beside it. A test in `src/guard.rs` fails if one is not, so when updating an action, change the commit and the comment together.
+
 ## Try the build first
 
 On the repository's Actions page, choose "Release" and "Run workflow". This builds and tests all three and keeps the files as artifacts on the run, without making a release. Do this before the first tag, because it is the first time the workflow, and the macOS code, will have run at all.
