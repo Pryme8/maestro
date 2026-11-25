@@ -74,6 +74,25 @@ Built in phase 3, in a first form.
 - **Quests:** a named piece of work assigned to an agent, with what the agent reported spending since it started.
 - **What reporting needs:** an agent only shows spending if it reports it. Subscription plans report tokens but not a real bill, so cost there is the vendor's own estimate. This is the same limit the router's ledger works within.
 
+## Directing agents
+
+This is where the app is headed: you develop with agents on different services and direct them from Maestro. You see what each agent is doing as it does it (the tools it calls, the files and data it reads, what comes back) and you can step in: tell it something, interrupt it, approve or refuse a step, pause it, stop it.
+
+Built so far, on the Live page and from the command line:
+
+- **Following sessions started anywhere.** Claude Code writes each session to a file on this computer as it goes. Maestro reads those files as they grow and shows every step: what was asked, what the agent said, each tool call with the command, file or search in it, and what came back with its size. Sessions touched in the last hour are picked up. Steps are held in memory only.
+- **Sessions started from Maestro.** Maestro starts the `claude` command with no window, on your own login, and reads its event stream. While it runs you can send it further messages, interrupt the current step, pause and resume its process, close it to new messages, or stop it. By default it may only read and search; one tick lets it edit files in its folder.
+- **A summary per session:** which tools it has used and how often, and which calls it is still waiting on.
+
+What the rest takes:
+
+- **Approving each step from Maestro.** Claude Code can hand every permission question to another program instead of refusing it. Maestro has to answer those questions on the same stream and show each one as a button. Until then a run started here cannot ask you anything: it is either read-only or allowed to edit.
+- **Other services.** Codex, Cursor and Gemini each have a scripted mode with an event stream of their own, so each needs a reader like the one for Claude Code. Their terms do not say another program may start them on a subscription login, so those runs would use an API key. Following their sessions started elsewhere needs their session files located and read, which has not been looked into.
+- **A picture, not a list.** The steps are shown as a list. A map of the session (the agent, the tools it reaches for, the files and sites each call touches, drawn as they happen) is the next view.
+- **Runs inside a work.** A run can be pointed at a work from the managed environment by hand. Taking a snapshot before every run and offering the rollback afterwards is not wired up.
+- **Acting on a watched session.** A session started elsewhere is matched to its process only by eye, on the Base page. Tying each session file to its process would put Pause and End on the Live page for those too.
+- **Routes.** The router's routes become runs here: the first tool's result, compacted into a brief, becomes the second tool's first message.
+
 ## Depth
 
 Built in phase 4, in a first form.

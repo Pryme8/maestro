@@ -13,6 +13,7 @@ pub enum Page {
     Base,
     Timeline,
     Network,
+    Live,
     Router,
 }
 
@@ -22,6 +23,7 @@ impl Page {
             "base" => Some(Page::Base),
             "timeline" => Some(Page::Timeline),
             "network" => Some(Page::Network),
+            "live" => Some(Page::Live),
             "router" => Some(Page::Router),
             _ => None,
         }

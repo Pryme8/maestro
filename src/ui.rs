@@ -4,6 +4,7 @@
 
 mod controls;
 mod crew;
+mod live;
 mod network;
 mod router;
 mod timeline;
@@ -94,6 +95,8 @@ pub struct App {
     /// The names behind network addresses, looked up in the background.
     names: crate::netmap::Names,
     net: network::NetUi,
+    /// What agent sessions are doing, and the runs started from here.
+    lv: live::LiveUi,
     /// When each process was last busy, kept by the sampling thread.
     stale: Arc<Mutex<crate::stale::Tracker>>,
     /// Show only programs flagged as not responding or cold.
@@ -193,6 +196,7 @@ impl App {
             router: router::RouterUi::load(),
             names,
             net: network::NetUi::new(),
+            lv: live::LiveUi::start(&cc.egui_ctx),
             stale,
             only_stale: false,
             shot: screenshot.map(|path| Shot {
@@ -317,6 +321,7 @@ impl eframe::App for App {
                     }
                     Page::Timeline => self.timeline_ui(ui),
                     Page::Network => self.network_ui(ui, &snap),
+                    Page::Live => self.live_ui(ui),
                     Page::Router => self.router_ui(ui),
                 });
         });
@@ -356,6 +361,8 @@ fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize, page: &mut Page) {
                     .on_hover_text("The last day, what happened, what agents spent, and achievements.");
                 ui.selectable_value(page, Page::Network, "Network")
                     .on_hover_text("Who each program is connected to, and which ports are open.");
+                ui.selectable_value(page, Page::Live, "Live")
+                    .on_hover_text("What each agent is doing, step by step, and sessions you direct from here.");
                 ui.selectable_value(page, Page::Router, "Router")
                     .on_hover_text("Your AI accounts, and the cheapest way to do a task with them.");
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

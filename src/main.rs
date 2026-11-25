@@ -26,6 +26,7 @@ mod classify;
 mod control;
 mod environment;
 mod history;
+mod live;
 mod netmap;
 mod paths;
 mod receiver;
@@ -57,6 +58,10 @@ fn main() -> eframe::Result<()> {
     }
     // The managed environment: `--env...` and `--work...`.
     if let Some(code) = environment::cli(&args) {
+        std::process::exit(code);
+    }
+    // What agents are doing, step by step: `--watch`, `--watch-once`, `--run`.
+    if let Some(code) = live::cli(&args) {
         std::process::exit(code);
     }
     // `--agents` lists the AI agents found running. It changes nothing.
@@ -164,7 +169,7 @@ fn main() -> eframe::Result<()> {
         .and_then(|name| ui::View::parse(name))
         .unwrap_or(ui::View::Tiles);
 
-    // `--page base|timeline|network|router` picks the page the window opens on.
+    // `--page base|timeline|network|live|router` picks the page the window opens on.
     let page = arg_after(&args, "--page")
         .and_then(ui::Page::parse)
         .unwrap_or(ui::Page::Base);
