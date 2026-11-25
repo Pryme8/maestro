@@ -43,7 +43,7 @@ pub enum What {
     /// The agent wants to take a step and is waiting to be told it may.
     NeedsYou { tool: String, detail: String },
     /// A person answered that question.
-    Decided { tool: String, allowed: bool },
+    Decided { tool: String, allowed: bool, standing: bool },
     /// Something went wrong outside the conversation.
     Problem(String),
     /// The process ended.
@@ -236,6 +236,8 @@ pub struct Session {
     calls: HashMap<String, String>,
     /// Steps waiting for a yes or a no, oldest first.
     pub asks: Vec<Ask>,
+    /// Kinds of step allowed for the rest of the session.
+    pub standing: Vec<Standing>,
 }
 
 impl Session {
@@ -250,6 +252,7 @@ impl Session {
             tool_counts: HashMap::new(),
             calls: HashMap::new(),
             asks: Vec::new(),
+            standing: Vec::new(),
         }
     }
 
@@ -339,6 +342,22 @@ impl Feed {
         session.asks.push(ask);
     }
 
+    /// Take in a question. When a standing yes covers it, it is recorded as
+    /// allowed and handed back for the caller to answer; otherwise it waits.
+    pub fn ask_or_cover(&mut self, id: &str, ask: Ask) -> Option<Ask> {
+        let session = self.session(id);
+        if !covered(&session.standing, &ask, &session.cwd) {
+            self.ask(id, ask);
+            return None;
+        }
+        session.last_ms = session.last_ms.max(ask.at_ms);
+        session.steps.push_back(Step {
+            at_ms: ask.at_ms,
+            what: What::Decided { tool: ask.tool.clone(), allowed: true, standing: true },
+        });
+        Some(ask)
+    }
+
     /// Take a question off the list. `allowed` is the person's answer, or
     /// `None` when the tool withdrew the question itself.
     pub fn settle(&mut self, id: &str, request_id: &str, allowed: Option<bool>) -> Option<Ask> {
@@ -353,6 +372,7 @@ impl Feed {
                 what: What::Decided {
                     tool: ask.tool.clone(),
                     allowed,
+                    standing: false,
                 },
             });
         }
@@ -546,7 +566,7 @@ pub struct Run {
     pub id: String,
     pub pid: u32,
     child: Child,
-    stdin: Option<ChildStdin>,
+    stdin: Arc<Mutex<Option<ChildStdin>>>,
     feed: Arc<Mutex<Feed>>,
     requests: u32,
 }
@@ -675,17 +695,32 @@ impl Run {
             feed.add(&id, true, first);
         }
 
+        let stdin = Arc::new(Mutex::new(child.stdin.take()));
         if let Some(stdout) = child.stdout.take() {
             let (feed, id, wake) = (feed.clone(), id.clone(), wake.clone());
+            let stdin = stdin.clone();
             std::thread::spawn(move || {
                 for line in BufReader::new(stdout).lines().map_while(Result::ok) {
                     // A question about a step, or the tool taking one back.
                     if let Some(control) = parse_control(&line, now_ms()) {
-                        if let Ok(mut feed) = feed.lock() {
-                            match control {
-                                Control::Ask(ask) => feed.ask(&id, ask),
+                        // A question a standing yes covers is answered here,
+                        // at once, whether or not the window is being drawn.
+                        let covered = match feed.lock() {
+                            Ok(mut feed) => match control {
+                                Control::Ask(ask) => feed.ask_or_cover(&id, ask),
                                 Control::Withdrawn(request) => {
                                     feed.settle(&id, &request, None);
+                                    None
+                                }
+                            },
+                            Err(_) => None,
+                        };
+                        if let Some(ask) = covered {
+                            let sent = send(&stdin, &answer_line(&ask, true, ""));
+                            if sent.is_err() {
+                                // The yes did not reach the agent, so the question is put to the person.
+                                if let Ok(mut feed) = feed.lock() {
+                                    feed.ask(&id, ask);
                                 }
                             }
                         }
@@ -728,7 +763,7 @@ impl Run {
         let mut run = Run {
             id,
             pid: child.id(),
-            stdin: child.stdin.take(),
+            stdin,
             child,
             feed,
             requests: 0,
@@ -738,10 +773,52 @@ impl Run {
     }
 
     fn write(&mut self, line: &str) -> Result<(), String> {
-        let stdin = self.stdin.as_mut().ok_or("This run is no longer taking messages.")?;
-        writeln!(stdin, "{line}")
-            .and_then(|()| stdin.flush())
-            .map_err(|e| format!("The run did not take the message. ({e})"))
+        send(&self.stdin, line)
+    }
+
+    /// Allow this step and every later one of the same kind, until the
+    /// session ends or the yes is taken back. Fails, changing nothing, when
+    /// the step is of a kind that is always asked.
+    pub fn allow_standing(&mut self, request_id: &str) -> Result<Standing, String> {
+        let (standing, also) = {
+            let mut feed = self.feed.lock().map_err(|_| "The session list is not readable.")?;
+            let session = feed
+                .sessions
+                .iter_mut()
+                .find(|s| s.id == self.id)
+                .ok_or("That session is gone.")?;
+            let ask = session
+                .asks
+                .iter()
+                .find(|a| a.request_id == request_id)
+                .ok_or("That question is no longer waiting.")?;
+            let standing = standing_for(ask, &session.cwd)?;
+            if !session.standing.contains(&standing) {
+                session.standing.push(standing.clone());
+            }
+            // Other questions already waiting may be of the same kind.
+            let also: Vec<String> = session
+                .asks
+                .iter()
+                .filter(|a| a.request_id != request_id && covered(&session.standing, a, &session.cwd))
+                .map(|a| a.request_id.clone())
+                .collect();
+            (standing, also)
+        };
+        self.answer(request_id, true, "")?;
+        for request in also {
+            let _ = self.answer(&request, true, "");
+        }
+        Ok(standing)
+    }
+
+    /// Take a standing yes back. Steps of that kind are asked again.
+    pub fn revoke_standing(&mut self, standing: &Standing) {
+        if let Ok(mut feed) = self.feed.lock() {
+            if let Some(session) = feed.sessions.iter_mut().find(|s| s.id == self.id) {
+                session.standing.retain(|s| s != standing);
+            }
+        }
     }
 
     /// Tell the agent something. It is read when the agent next looks for input.
@@ -785,17 +862,21 @@ impl Run {
 
     /// True while the run still takes messages.
     pub fn open(&self) -> bool {
-        self.stdin.is_some()
+        self.stdin.lock().is_ok_and(|stdin| stdin.is_some())
     }
 
     /// Take no more messages. The agent finishes what it has and exits.
     pub fn finish(&mut self) {
-        self.stdin = None;
+        if let Ok(mut stdin) = self.stdin.lock() {
+            *stdin = None;
+        }
     }
 
     /// End the process now.
     pub fn stop(&mut self) {
-        self.stdin = None;
+        if let Ok(mut stdin) = self.stdin.lock() {
+            *stdin = None;
+        }
         let _ = self.child.kill();
     }
 
@@ -829,6 +910,104 @@ pub struct Ask {
     pub input: Value,
     pub tool_use_id: Option<String>,
     pub at_ms: u64,
+}
+
+/// Write one line to the agent.
+fn send(stdin: &Mutex<Option<ChildStdin>>, line: &str) -> Result<(), String> {
+    let mut stdin = stdin.lock().map_err(|_| "The line to the run is not usable.")?;
+    let stdin = stdin.as_mut().ok_or("This run is no longer taking messages.")?;
+    writeln!(stdin, "{line}")
+        .and_then(|()| stdin.flush())
+        .map_err(|e| format!("The run did not take the message. ({e})"))
+}
+
+/// A kind of step allowed for the rest of a session.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Standing {
+    pub tool: String,
+    /// For a command: the program and its first word, such as "cargo test".
+    /// Empty for other tools.
+    pub scope: String,
+}
+
+impl Standing {
+    /// What it covers, in words.
+    pub fn label(&self) -> String {
+        let tool = short_tool(&self.tool);
+        match (self.scope.is_empty(), FILE_TOOLS.contains(&self.tool.as_str())) {
+            (false, _) => format!("`{}` commands", self.scope),
+            (true, true) => format!("{tool} on files in the session's folder"),
+            (true, false) => format!("every use of {tool}"),
+        }
+    }
+}
+
+const COMMAND_TOOLS: &[&str] = &["Bash", "PowerShell"];
+const FILE_TOOLS: &[&str] = &["Edit", "Write", "MultiEdit", "NotebookEdit"];
+
+/// The standing yes that would cover a step, or why this step is always asked.
+///
+/// A standing yes is narrow on purpose. For a command it covers one program
+/// and its first word, and only a single plain command: anything chained,
+/// piped, redirected or substituted is asked every time, because the part
+/// after the first command could be anything. For a file tool it covers
+/// files inside the session's folder and nothing outside it.
+pub fn standing_for(ask: &Ask, cwd: &str) -> Result<Standing, String> {
+    let tool = ask.tool.as_str();
+    if COMMAND_TOOLS.contains(&tool) {
+        let command = ask.input.get("command").and_then(Value::as_str).unwrap_or("").trim();
+        if command.is_empty() {
+            return Err("There is no command to go by.".to_string());
+        }
+        if command.contains([';', '&', '|', '<', '>', '$', '`', '(', ')', '{', '}', '\n', '\r']) {
+            return Err(
+                "A command that chains, pipes, redirects or substitutes is asked every time, \
+                 because a standing yes could not say what the rest of it does."
+                    .to_string(),
+            );
+        }
+        let mut words = command.split_whitespace();
+        let program = words.next().unwrap_or("");
+        if program.contains('=') {
+            return Err("A command that sets a variable first is asked every time.".to_string());
+        }
+        let scope = match words.next() {
+            Some(word) if !word.starts_with('-') => format!("{program} {word}"),
+            _ => program.to_string(),
+        };
+        return Ok(Standing { tool: tool.to_string(), scope });
+    }
+    let path = ["file_path", "notebook_path", "path"]
+        .iter()
+        .find_map(|key| ask.input.get(key).and_then(Value::as_str));
+    if FILE_TOOLS.contains(&tool) || path.is_some() {
+        let Some(path) = path else {
+            return Err("It does not say which file, so it is asked every time.".to_string());
+        };
+        if !inside(path, cwd) {
+            return Err("A file outside the session's folder is asked every time.".to_string());
+        }
+    }
+    Ok(Standing { tool: tool.to_string(), scope: String::new() })
+}
+
+/// True when a standing yes already given covers this step.
+pub fn covered(standing: &[Standing], ask: &Ask, cwd: &str) -> bool {
+    !standing.is_empty() && standing_for(ask, cwd).is_ok_and(|kind| standing.contains(&kind))
+}
+
+/// True when a path names something inside a folder, going by its text.
+fn inside(path: &str, folder: &str) -> bool {
+    let plain = |p: &str| p.replace('\\', "/").trim_end_matches('/').to_ascii_lowercase();
+    let (path, folder) = (plain(path), plain(folder));
+    if path.split('/').any(|part| part == "..") {
+        return false;
+    }
+    let absolute = path.starts_with('/') || path.chars().nth(1) == Some(':');
+    if !absolute {
+        return true;
+    }
+    !folder.is_empty() && path.strip_prefix(&folder).is_some_and(|rest| rest.starts_with('/'))
 }
 
 /// What a line on the stream says about permission, if anything.
@@ -1031,9 +1210,11 @@ fn print_step(name: &str, step: &Step) {
             clip(text, 160)
         ),
         What::NeedsYou { tool, detail } => format!("asks to use {tool}: {}", clip(detail, 140)),
-        What::Decided { tool, allowed } => {
-            format!("{tool} was {}", if *allowed { "allowed" } else { "refused" })
-        }
+        What::Decided { tool, allowed, standing } => format!(
+            "{tool} was {}{}",
+            if *allowed { "allowed" } else { "refused" },
+            if *standing { " by a standing yes" } else { "" }
+        ),
         What::Problem(text) => format!("problem: {text}"),
         What::Ended => "the process ended".to_string(),
     };
@@ -1069,7 +1250,11 @@ pub fn cli(args: &[String]) -> Option<i32> {
         };
         // `--answer allow` or `--answer refuse` answers every question the
         // agent asks the same way. Without it the run is read-only.
-        let answer = after("--answer").and_then(|i| args.get(i + 1)).map(|a| a == "allow");
+        // `--answer session` allows each kind of step for the rest of the run
+        // the first time it comes up, where a standing yes can be given.
+        let how = after("--answer").and_then(|i| args.get(i + 1)).map(String::as_str);
+        let answer = how.map(|a| a == "allow" || a == "session");
+        let for_session = how == Some("session");
         let leave = if answer.is_some() { Leave::AskFirst } else { Leave::ReadOnly };
         // `--model <name>` picks the model; without it the tool's own setting is used.
         let model = after("--model").and_then(|i| args.get(i + 1)).map_or("", String::as_str);
@@ -1133,6 +1318,15 @@ pub fn cli(args: &[String]) -> Option<i32> {
             for ask in asks {
                 let allow = answer.unwrap_or(false);
                 println!("          why it asks: {}", if ask.reason.is_empty() { "-" } else { &ask.reason });
+                if for_session {
+                    match run.allow_standing(&ask.request_id) {
+                        Ok(standing) => {
+                            println!("          standing yes given: {}", standing.label());
+                            continue;
+                        }
+                        Err(why) => println!("          no standing yes: {why}"),
+                    }
+                }
                 if let Err(problem) = run.answer(&ask.request_id, allow, "Refused from the command line.") {
                     eprintln!("{problem}");
                 }
@@ -1437,7 +1631,7 @@ mod tests {
         assert!(feed.settle("run", "a", Some(true)).is_some());
         assert!(matches!(
             &feed.sessions[0].steps.back().unwrap().what,
-            What::Decided { allowed: true, .. }
+            What::Decided { allowed: true, standing: false, .. }
         ));
         // Withdrawn by the tool: gone, and nothing is claimed to have been decided.
         let steps = feed.sessions[0].steps.len();
@@ -1456,5 +1650,85 @@ mod tests {
         assert!(edits.windows(2).any(|w| w == ["--permission-prompt-tool", "stdio"]));
         // Read-only has nobody to ask, so the tool refuses by itself.
         assert!(claude_args(Leave::ReadOnly).windows(2).any(|w| w == ["--permission-prompts", "none"]));
+    }
+    fn asking(tool: &str, input: Value) -> Ask {
+        Ask {
+            request_id: "r".into(),
+            tool: tool.into(),
+            detail: String::new(),
+            description: String::new(),
+            reason: String::new(),
+            input,
+            tool_use_id: None,
+            at_ms: 1,
+        }
+    }
+
+    #[test]
+    fn a_standing_yes_for_a_command_covers_one_program_and_its_first_word() {
+        let kind = |command: &str| standing_for(&asking("Bash", json!({ "command": command })), "/work/app");
+        assert_eq!(kind("cargo test --locked").unwrap().scope, "cargo test");
+        assert_eq!(kind("  git status  ").unwrap().scope, "git status");
+        assert_eq!(kind("ls -la").unwrap().scope, "ls");
+        assert_eq!(kind("ls").unwrap().label(), "`ls` commands");
+        // Anything after the first command could be anything, so these are always asked.
+        for always in [
+            "cargo test && rm -rf /",
+            "cargo test; curl example.com",
+            "cargo test | sh",
+            "cargo test > /etc/passwd",
+            "echo $(cat secret)",
+            "echo `cat secret`",
+            "cargo test\nrm -rf x",
+            "FOO=1 cargo test",
+            "",
+        ] {
+            assert!(kind(always).is_err(), "{always}");
+        }
+        let given = [kind("cargo test").unwrap()];
+        let covers = |command: &str| covered(&given, &asking("Bash", json!({ "command": command })), "/work/app");
+        assert!(covers("cargo test --release"));
+        assert!(!covers("cargo publish"));
+        assert!(!covers("cargo test && cargo publish"));
+        assert!(!covered(&given, &asking("PowerShell", json!({ "command": "cargo test" })), "/work/app"));
+    }
+
+    #[test]
+    fn a_standing_yes_for_files_stops_at_the_sessions_folder() {
+        let edit = |path: &str| standing_for(&asking("Edit", json!({ "file_path": path })), "Z:\\Work\\app");
+        assert_eq!(edit("Z:\\Work\\app\\src\\main.rs").unwrap().label(), "Edit on files in the session's folder");
+        assert!(edit("z:/work/app/notes.txt").is_ok());
+        assert!(edit("src/main.rs").is_ok());
+        for outside in ["Z:\\Work\\other\\x.rs", "Z:\\Work\\app-two\\x.rs", "C:\\Users\\me\\.ssh\\config", "../x.rs", "Z:\\Work\\app\\..\\x.rs"] {
+            assert!(edit(outside).is_err(), "{outside}");
+        }
+        assert!(standing_for(&asking("Write", json!({})), "Z:\\Work\\app").is_err());
+        // A tool with no file and no command is allowed as a whole.
+        let fetch = standing_for(&asking("WebFetch", json!({ "url": "https://docs.rs" })), "x").unwrap();
+        assert_eq!(fetch.label(), "every use of WebFetch");
+    }
+
+    #[test]
+    fn a_covered_question_is_recorded_as_allowed_and_never_waits() {
+        let mut feed = Feed::default();
+        let mut first = one_step(What::Asked("go".into()));
+        first.cwd = Some("/work/app".into());
+        feed.add("run", true, first);
+        let test = || asking("Bash", json!({ "command": "cargo test" }));
+        // With no standing yes, it waits.
+        assert!(feed.ask_or_cover("run", test()).is_none());
+        assert_eq!(feed.sessions[0].asks.len(), 1);
+        feed.settle("run", "r", Some(true));
+        feed.sessions[0].standing.push(standing_for(&test(), "/work/app").unwrap());
+        // With one, it is handed back to be answered, and the feed says how it was decided.
+        assert!(feed.ask_or_cover("run", test()).is_some());
+        assert!(feed.sessions[0].asks.is_empty());
+        assert!(matches!(
+            &feed.sessions[0].steps.back().unwrap().what,
+            What::Decided { allowed: true, standing: true, .. }
+        ));
+        // A different command still waits.
+        assert!(feed.ask_or_cover("run", asking("Bash", json!({ "command": "cargo publish" }))).is_none());
+        assert_eq!(feed.sessions[0].asks.len(), 1);
     }
 }

@@ -66,6 +66,10 @@ enum Act {
     Finish,
     Stop,
     Answer { request: String, tool: String, allow: bool },
+    /// Allow this step and later ones of its kind.
+    Standing { request: String },
+    /// Take a standing yes back.
+    Revoke(live::Standing),
     Dismiss,
     Changes,
     AskRollback,
@@ -151,8 +155,11 @@ fn step_row(ui: &mut Ui, now: u64, step: &Step) {
         ),
         What::Finished { ok: false, text, .. } => ("error", RED, text.clone(), None),
         What::NeedsYou { tool, detail } => ("asks", AMBER, format!("May it use {tool}?  {}", clip(detail, 150)), Some(detail)),
-        What::Decided { tool, allowed: true } => ("allowed", TEAL, format!("You allowed {tool}."), None),
-        What::Decided { tool, allowed: false } => ("refused", RED, format!("You refused {tool}."), None),
+        What::Decided { tool, allowed: true, standing: true } => {
+            ("allowed", TEAL, format!("{tool} went ahead under your standing yes."), None)
+        }
+        What::Decided { tool, allowed: true, .. } => ("allowed", TEAL, format!("You allowed {tool}."), None),
+        What::Decided { tool, allowed: false, .. } => ("refused", RED, format!("You refused {tool}."), None),
         What::Problem(text) => ("problem", RED, text.clone(), None),
         What::Ended => ("ended", DIM, "The process has exited.".to_string(), None),
     };
@@ -464,6 +471,22 @@ impl App {
         let attached = lv.runs.iter_mut().find(|a| a.run.id == session.id);
 
         // Steps it is waiting to be allowed to take.
+        if attached.is_some() && !session.standing.is_empty() {
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("Allowed without asking, for this session:").color(TEAL).size(11.0));
+                for kind in &session.standing {
+                    ui.label(RichText::new(kind.label()).size(11.0));
+                    if ui
+                        .small_button("take back")
+                        .on_hover_text("Steps of this kind are asked again from now on.")
+                        .clicked()
+                    {
+                        act = Some(Act::Revoke(kind.clone()));
+                    }
+                }
+            });
+        }
         if attached.is_some() {
             for ask in &session.asks {
                 ui.add_space(4.0);
@@ -503,6 +526,25 @@ impl App {
                                     tool: ask.tool.clone(),
                                     allow: true,
                                 });
+                            }
+                            match live::standing_for(ask, &session.cwd) {
+                                Ok(kind) => {
+                                    if ui
+                                        .button(format!("Allow {} for this session", kind.label()))
+                                        .on_hover_text(
+                                            "This step goes ahead, and so does every later step of the same \
+                                             kind, without asking, until the session ends or you take it back. \
+                                             Anything else is still asked.",
+                                        )
+                                        .clicked()
+                                    {
+                                        act = Some(Act::Standing { request: ask.request_id.clone() });
+                                    }
+                                }
+                                Err(why) => {
+                                    ui.add_enabled(false, egui::Button::new("Allow for this session"))
+                                        .on_disabled_hover_text(why);
+                                }
                             }
                             if ui
                                 .button(RichText::new("Refuse").color(RED))
@@ -721,6 +763,18 @@ impl App {
                                 lv.why.clear();
                             }
                             result
+                        }
+                        Act::Standing { request } => attached.run.allow_standing(&request).map(|kind| {
+                            self.ctl.note(
+                                format!("Allowed for the rest of the session: {}", kind.label()),
+                                true,
+                                None,
+                            );
+                        }),
+                        Act::Revoke(kind) => {
+                            attached.run.revoke_standing(&kind);
+                            self.ctl.note(format!("Took back the standing yes for {}", kind.label()), true, None);
+                            Ok(())
                         }
                         Act::Dismiss => Ok(()),
                         Act::AskRollback => {
