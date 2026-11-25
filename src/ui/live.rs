@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::live::{self, Feed, Leave, Run, Step, What};
+use crate::safe::{self, Safe};
 use crate::services::{self, Service};
 use std::sync::atomic::AtomicBool;
 
@@ -17,6 +18,10 @@ pub(super) struct LiveUi {
     leave: Leave,
     /// The model a new session runs on. Empty means the tool's own setting.
     model: String,
+    /// Start the session in a separate copy of the repository.
+    copy: bool,
+    /// A session being made ready: its copy cut and its snapshot taken.
+    starting: Option<Starting>,
     /// The named sign-in a new session runs under. `None` is the tool's own.
     login: Option<String>,
     /// A sign-in being typed in, and the key variable for it, if any.
@@ -42,7 +47,16 @@ pub(super) struct LiveUi {
 struct Attached {
     run: Run,
     paused: bool,
+    /// The safe copy it works in, if it has one.
+    safe: Option<Safe>,
+    /// What it changed, as last listed.
+    changes: Option<Vec<String>>,
+    /// Roll back was clicked once and waits for a second click.
+    confirm_rollback: bool,
 }
+
+/// A session being got ready off the window's thread.
+type Starting = std::sync::mpsc::Receiver<Result<(Run, Option<Safe>), String>>;
 
 /// Something the user asked a run to do.
 enum Act {
@@ -53,6 +67,10 @@ enum Act {
     Stop,
     Answer { request: String, tool: String, allow: bool },
     Dismiss,
+    Changes,
+    AskRollback,
+    Rollback,
+    Keep,
 }
 
 impl LiveUi {
@@ -73,6 +91,8 @@ impl LiveUi {
             prompt: String::new(),
             leave: Leave::AskFirst,
             model: String::new(),
+            copy: true,
+            starting: None,
             login: None,
             new_login: String::new(),
             new_key_var: String::new(),
@@ -261,6 +281,14 @@ impl App {
                             .size(11.0),
                     );
                 });
+                ui.checkbox(&mut lv.copy, "Work in a safe copy that can be rolled back")
+                    .on_hover_text(
+                        "Cuts a separate copy of the repository in that folder, on its own branch, and takes a \
+                         snapshot before the session starts. Your own files are not touched, and changes you \
+                         have not committed are not carried into the copy. Afterwards you can see what it \
+                         changed, roll it all back, or keep it as a commit on that branch. The folder has to \
+                         be the top of a git repository. Starting in an existing work always takes a snapshot.",
+                    );
                 ui.label(RichText::new("Before a step that needs permission, such as running a command or changing a file:").color(DIM).size(11.0));
                 ui.radio_value(&mut lv.leave, Leave::AskFirst, "Ask me each time")
                     .on_hover_text("Each such step waits here until you allow or refuse it.");
@@ -272,7 +300,10 @@ impl App {
                 ui.radio_value(&mut lv.leave, Leave::ReadOnly, "Refuse them all: it may only read and search")
                     .on_hover_text("Nothing is asked. Anything that would need permission is refused by the tool itself.");
                 ui.horizontal(|ui| {
-                    let ready = blocked.is_none() && !lv.folder.trim().is_empty() && !lv.prompt.trim().is_empty();
+                    let ready = blocked.is_none()
+                        && lv.starting.is_none()
+                        && !lv.folder.trim().is_empty()
+                        && !lv.prompt.trim().is_empty();
                     if ui
                         .add_enabled(ready, egui::Button::new("Start Claude Code"))
                         .on_hover_text(
@@ -281,27 +312,47 @@ impl App {
                         )
                         .clicked()
                     {
-                        let leave = lv.leave;
+                        let (leave, copy) = (lv.leave, lv.copy);
                         let wake = ui.ctx().clone();
-                        let folder = std::path::PathBuf::from(lv.folder.trim());
-                        let logins = crate::logins::Logins::load();
-                        let who = lv.login.as_deref().and_then(|name| logins.find(name));
-                        match Run::start(lv.feed.clone(), &folder, lv.prompt.trim(), leave, &lv.model, who, move || {
-                            wake.request_repaint()
-                        }) {
-                            Ok(run) => {
-                                self.ctl.note(
-                                    format!("Started Claude Code in {}", folder.display()),
-                                    true,
-                                    None,
-                                );
-                                lv.selected = Some(run.id.clone());
-                                lv.runs.push(Attached { run, paused: false });
-                                lv.prompt.clear();
-                                lv.problem = None;
-                            }
-                            Err(problem) => lv.problem = Some(problem),
-                        }
+                        let folder = lv.folder.trim().to_string();
+                        let prompt = lv.prompt.trim().to_string();
+                        let model = lv.model.clone();
+                        let who = lv
+                            .login
+                            .as_deref()
+                            .and_then(|name| crate::logins::Logins::load().find(name).cloned());
+                        let feed = lv.feed.clone();
+                        let (tx, rx) = std::sync::mpsc::channel();
+                        lv.starting = Some(rx);
+                        lv.problem = None;
+                        // Cutting a copy of a large repository takes a while,
+                        // so it is done off the window's thread.
+                        std::thread::spawn(move || {
+                            let made = (|| {
+                                let mut env = crate::environment::Environment::load();
+                                let safe = safe::prepare(&mut env, &safe::root(), &folder, copy, &prompt)?;
+                                if safe.is_some() {
+                                    env.save();
+                                }
+                                let place = safe.as_ref().map_or(folder.as_str(), |s| s.path.as_str());
+                                let waker = wake.clone();
+                                let run = Run::start(
+                                    feed,
+                                    std::path::Path::new(place),
+                                    &prompt,
+                                    leave,
+                                    &model,
+                                    who.as_ref(),
+                                    move || waker.request_repaint(),
+                                )?;
+                                Ok((run, safe))
+                            })();
+                            let _ = tx.send(made);
+                            wake.request_repaint();
+                        });
+                    }
+                    if lv.starting.is_some() {
+                        ui.label(RichText::new("Getting it ready…").color(AMBER).size(11.0));
                     }
                     if let Some(blocked) = &blocked {
                         ui.label(RichText::new(blocked).color(AMBER).size(11.0));
@@ -312,6 +363,29 @@ impl App {
                 });
             });
         ui.add_space(8.0);
+
+        if let Some(made) = lv.starting.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            lv.starting = None;
+            match made {
+                Ok((run, safe)) => {
+                    let place = match &safe {
+                        Some(safe) => format!("the safe copy {} (snapshot {})", safe.work, safe.snapshot),
+                        None => lv.folder.trim().to_string(),
+                    };
+                    self.ctl.note(format!("Started Claude Code in {place}"), true, None);
+                    lv.selected = Some(run.id.clone());
+                    lv.runs.push(Attached {
+                        run,
+                        paused: false,
+                        safe,
+                        changes: None,
+                        confirm_rollback: false,
+                    });
+                    lv.prompt.clear();
+                }
+                Err(problem) => lv.problem = Some(problem),
+            }
+        }
 
         let feed = lv.feed.clone();
         let Ok(feed) = feed.lock() else { return };
@@ -456,6 +530,65 @@ impl App {
         if let Some(attached) = attached {
             let running = attached.run.running();
             let open = attached.run.open();
+            if let Some(safe) = &attached.safe {
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(format!(
+                        "Working in the safe copy \"{}\", on the branch {}. Snapshot {} was taken before it started.",
+                        safe.work, safe.branch, safe.snapshot
+                    ))
+                    .color(TEAL)
+                    .size(11.0),
+                )
+                .on_hover_text(format!("{}\ncut from {}", safe.path, safe.repo));
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .small_button("What has it changed?")
+                        .on_hover_text("Lists every file that differs from the snapshot.")
+                        .clicked()
+                    {
+                        act = Some(Act::Changes);
+                    }
+                    if attached.confirm_rollback {
+                        if ui
+                            .small_button(RichText::new("Confirm: undo everything it did").color(RED))
+                            .clicked()
+                        {
+                            act = Some(Act::Rollback);
+                        }
+                    } else if ui
+                        .add_enabled(!running, egui::Button::new("Roll back…").small())
+                        .on_hover_text("Puts the copy back exactly as it was before this session, including anything it committed.")
+                        .on_disabled_hover_text("Stop the session first, so it is not writing while files are put back.")
+                        .clicked()
+                    {
+                        act = Some(Act::AskRollback);
+                    }
+                    if ui
+                        .add_enabled(!running, egui::Button::new("Keep as a commit").small())
+                        .on_hover_text(format!(
+                            "Commits everything in the copy to the branch {}. To bring it into your own \
+                             checkout, merge that branch there yourself.",
+                            safe.branch
+                        ))
+                        .on_disabled_hover_text("Stop the session first.")
+                        .clicked()
+                    {
+                        act = Some(Act::Keep);
+                    }
+                });
+                if let Some(changes) = &attached.changes {
+                    if changes.is_empty() {
+                        ui.label(RichText::new("Nothing differs from the snapshot.").color(DIM).size(11.0));
+                    }
+                    for line in changes.iter().take(30) {
+                        ui.label(RichText::new(line).monospace().size(11.0));
+                    }
+                    if changes.len() > 30 {
+                        ui.label(RichText::new(format!("and {} more", changes.len() - 30)).color(DIM).size(11.0));
+                    }
+                }
+            }
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
                 if !running {
@@ -590,6 +723,39 @@ impl App {
                             result
                         }
                         Act::Dismiss => Ok(()),
+                        Act::AskRollback => {
+                            attached.confirm_rollback = true;
+                            Ok(())
+                        }
+                        Act::Changes | Act::Rollback | Act::Keep => match attached.safe.clone() {
+                            None => Ok(()),
+                            Some(safe) => {
+                                let env = crate::environment::Environment::load();
+                                let done = match act {
+                                    Act::Rollback => safe::rollback(&env, &safe).map(|()| {
+                                        self.ctl.note(
+                                            format!("Rolled the safe copy {} back to before its session", safe.work),
+                                            true,
+                                            None,
+                                        );
+                                    }),
+                                    Act::Keep => env
+                                        .keep(&safe.work, "Work from a Maestro session")
+                                        .map(|commit| {
+                                            self.ctl.note(
+                                                format!("Kept the session's work as commit {commit} on {}", safe.branch),
+                                                true,
+                                                None,
+                                            );
+                                        }),
+                                    _ => Ok(()),
+                                };
+                                attached.confirm_rollback = false;
+                                // Whatever was done, show where things stand now.
+                                done.and_then(|()| safe::changes(&env, &safe))
+                                    .map(|list| attached.changes = Some(list))
+                            }
+                        },
                     };
                     lv.problem = result.err();
                 }

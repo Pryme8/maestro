@@ -341,6 +341,32 @@ impl Environment {
         Ok(snapshot)
     }
 
+    /// The files that differ from a snapshot, one per line as git names
+    /// them: a letter for what happened, a tab, and the path. Files not yet
+    /// committed count, and files git is told to ignore do not.
+    pub fn changes(&self, name: &str, number: u32) -> Result<Vec<String>, String> {
+        let work = self.work(name)?;
+        let snapshot = work
+            .snapshots
+            .iter()
+            .find(|s| s.number == number)
+            .ok_or(format!("The work {name} has no such snapshot."))?;
+        self.git(&work.path, &["add", "-A"])?;
+        let listed = self.git(&work.path, &["diff", "--cached", "--name-status", &snapshot.commit]);
+        // The worktree's own staging area is put back whatever happened.
+        self.git(&work.path, &["reset", "-q"])?;
+        Ok(listed?.lines().filter(|l| !l.trim().is_empty()).map(str::to_string).collect())
+    }
+
+    /// Commit everything in the work to its own branch, and give back the
+    /// short name of the commit.
+    pub fn keep(&self, name: &str, message: &str) -> Result<String, String> {
+        let work = self.work(name)?;
+        self.git(&work.path, &["add", "-A"])?;
+        self.git(&work.path, &["commit", "-q", "-m", message])?;
+        self.git(&work.path, &["rev-parse", "--short", "HEAD"])
+    }
+
     /// Delete the worktree's folder. Its branch and snapshots stay in the
     /// repository, so nothing committed or snapshotted is lost.
     pub fn work_remove(&mut self, name: &str) -> Result<Work, String> {

@@ -1085,7 +1085,28 @@ pub fn cli(args: &[String]) -> Option<i32> {
             },
             None => None,
         };
-        let mut run = match Run::start(feed.clone(), Path::new(folder), prompt, leave, model, who, || {}) {
+        // `--safe` runs it in a separate copy of the repository, with a
+        // snapshot taken first, and lists what it changed afterwards.
+        let safe = if after("--safe").is_some() {
+            let mut env = crate::environment::Environment::load();
+            match crate::safe::prepare(&mut env, &crate::safe::root(), folder, true, prompt) {
+                Ok(safe) => {
+                    env.save();
+                    safe
+                }
+                Err(problem) => {
+                    eprintln!("{problem}");
+                    return Some(1);
+                }
+            }
+        } else {
+            None
+        };
+        if let Some(safe) = &safe {
+            println!("working in the safe copy {} at {} (snapshot {})", safe.work, safe.path, safe.snapshot);
+        }
+        let place = safe.as_ref().map_or(folder.as_str(), |s| s.path.as_str());
+        let mut run = match Run::start(feed.clone(), Path::new(place), prompt, leave, model, who, || {}) {
             Ok(run) => run,
             Err(problem) => {
                 eprintln!("{problem}");
@@ -1124,6 +1145,20 @@ pub fn cli(args: &[String]) -> Option<i32> {
         }
         std::thread::sleep(std::time::Duration::from_millis(300));
         show(&feed, usize::MAX);
+        if let Some(safe) = &safe {
+            let env = crate::environment::Environment::load();
+            match crate::safe::changes(&env, safe) {
+                Ok(list) if list.is_empty() => println!("it changed nothing"),
+                Ok(list) => println!("it changed:
+  {}", list.join("
+  ")),
+                Err(problem) => eprintln!("{problem}"),
+            }
+            println!(
+                "to undo it all: --work-rollback {} {}    to look: {}",
+                safe.work, safe.snapshot, safe.path
+            );
+        }
         return Some(0);
     }
 

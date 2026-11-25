@@ -32,6 +32,7 @@ mod netmap;
 mod paths;
 mod receiver;
 mod router;
+mod safe;
 mod services;
 mod stale;
 mod telemetry;
