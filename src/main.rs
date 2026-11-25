@@ -31,6 +31,7 @@ mod netmap;
 mod paths;
 mod receiver;
 mod router;
+mod services;
 mod stale;
 mod telemetry;
 mod ui;
@@ -59,6 +60,11 @@ fn main() -> eframe::Result<()> {
     // The managed environment: `--env...` and `--work...`.
     if let Some(code) = environment::cli(&args) {
         std::process::exit(code);
+    }
+    // `--services` says which agent tools can be used and what to do about the rest.
+    if args.iter().any(|a| a == "--services") {
+        services::print();
+        return Ok(());
     }
     // What agents are doing, step by step: `--watch`, `--watch-once`, `--run`.
     if let Some(code) = live::cli(&args) {

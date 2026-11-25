@@ -677,6 +677,128 @@ impl Drop for Run {
     }
 }
 
+// ---- the session as a map ---------------------------------------------------
+
+/// One thing a tool was pointed at: a file, a command, a site.
+#[derive(Debug, PartialEq)]
+pub struct Leaf {
+    pub label: String,
+    /// The whole of what the label was cut from.
+    pub full: String,
+    pub count: u32,
+    pub last_ms: u64,
+}
+
+/// One tool and what it has been used on.
+#[derive(Debug, PartialEq)]
+pub struct Branch {
+    pub tool: String,
+    pub count: u32,
+    pub last_ms: u64,
+    /// When a call to it last failed.
+    pub failed_ms: Option<u64>,
+    /// A call to it has not come back yet.
+    pub waiting: bool,
+    /// Most recently used first.
+    pub leaves: Vec<Leaf>,
+}
+
+/// A tool's name without the prefix connectors add, such as `mcp__server__`.
+pub fn short_tool(name: &str) -> &str {
+    name.rsplit("__").next().filter(|s| !s.is_empty()).unwrap_or(name)
+}
+
+/// A short name for what a tool call was pointed at.
+pub fn target(tool: &str, detail: &str) -> String {
+    let detail = detail.trim();
+    if detail.is_empty() {
+        return String::new();
+    }
+    // A site: show who it is, not the whole address.
+    if let Some((_, rest)) = detail.split_once("://") {
+        let host = rest.split(['/', '?', '#', ' ']).next().unwrap_or(rest);
+        return clip(host, 30);
+    }
+    // A command: the program and its first word say what kind of thing ran.
+    if matches!(tool, "Bash" | "PowerShell") {
+        // After `cd somewhere &&` comes the command that matters.
+        let command = match detail.strip_prefix("cd ") {
+            Some(rest) => rest.split_once("&&").or_else(|| rest.split_once(';')).map_or(detail, |(_, after)| after),
+            None => detail,
+        };
+        let words: Vec<&str> = command
+            .split_whitespace()
+            .filter(|w| !w.contains('='))
+            .take(2)
+            .collect();
+        return clip(&words.join(" "), 26);
+    }
+    // A path: the last part is the file or folder.
+    let last = detail.rsplit(['/', '\\']).find(|part| !part.is_empty()).unwrap_or(detail);
+    if last.len() < detail.len() && !last.contains(' ') {
+        return clip(last, 30);
+    }
+    clip(detail.lines().next().unwrap_or(detail), 26)
+}
+
+/// Sort a session's steps into tools and what each was used on, in the order
+/// the tools were first called.
+pub fn map(session: &Session) -> Vec<Branch> {
+    let mut branches: Vec<Branch> = Vec::new();
+    for step in &session.steps {
+        match &step.what {
+            What::Tool { name, detail, .. } => {
+                let at = match branches.iter().position(|b| &b.tool == name) {
+                    Some(at) => at,
+                    None => {
+                        branches.push(Branch {
+                            tool: name.clone(),
+                            count: 0,
+                            last_ms: 0,
+                            failed_ms: None,
+                            waiting: false,
+                            leaves: Vec::new(),
+                        });
+                        branches.len() - 1
+                    }
+                };
+                let branch = &mut branches[at];
+                branch.count += 1;
+                branch.last_ms = step.at_ms;
+                let label = target(name, detail);
+                if label.is_empty() {
+                    continue;
+                }
+                match branch.leaves.iter_mut().find(|l| l.label == label) {
+                    Some(leaf) => {
+                        leaf.count += 1;
+                        leaf.last_ms = step.at_ms;
+                        leaf.full = detail.clone();
+                    }
+                    None => branch.leaves.push(Leaf {
+                        label,
+                        full: detail.clone(),
+                        count: 1,
+                        last_ms: step.at_ms,
+                    }),
+                }
+            }
+            What::ToolDone { name, ok: false, .. } => {
+                if let Some(branch) = branches.iter_mut().find(|b| &b.tool == name) {
+                    branch.failed_ms = Some(step.at_ms);
+                }
+            }
+            _ => {}
+        }
+    }
+    let waiting = session.waiting_on();
+    for branch in &mut branches {
+        branch.waiting = waiting.contains(&branch.tool.as_str());
+        branch.leaves.sort_by(|a, b| b.last_ms.cmp(&a.last_ms));
+    }
+    branches
+}
+
 // ---- command line ----------------------------------------------------------
 
 fn print_step(name: &str, step: &Step) {
@@ -895,5 +1017,54 @@ mod tests {
             .any(|w| w == ["--permission-mode", "acceptEdits"]));
         let line: Value = serde_json::from_str(&user_line("say \"hi\"\nplease")).unwrap();
         assert_eq!(line["message"]["content"][0]["text"], "say \"hi\"\nplease");
+    }
+
+    #[test]
+    fn targets_are_named_by_what_matters() {
+        assert_eq!(target("Read", "Z:\\Work\\app\\src\\main.rs"), "main.rs");
+        assert_eq!(target("Glob", "src/**/*.rs"), "*.rs");
+        assert_eq!(target("WebFetch", "https://docs.rs/egui/latest/egui/?x=1"), "docs.rs");
+        assert_eq!(target("Bash", "cargo test --release 2>&1 | tail"), "cargo test");
+        assert_eq!(target("Bash", "cd /z/work/app && git status --short"), "git status");
+        assert_eq!(target("Bash", "FOO=1 make"), "make");
+        assert_eq!(target("Grep", "fn main"), "fn main");
+        assert_eq!(target("Agent", ""), "");
+        assert_eq!(short_tool("mcp__ccd_turn__update_plan"), "update_plan");
+        assert_eq!(short_tool("Read"), "Read");
+    }
+
+    #[test]
+    fn a_session_becomes_tools_and_what_they_touched() {
+        let mut feed = Feed::default();
+        let tool = |at: u64, id: &str, name: &str, detail: &str| Step {
+            at_ms: at,
+            what: What::Tool { id: id.into(), name: name.into(), detail: detail.into() },
+        };
+        let done = |at: u64, id: &str, ok: bool| Step {
+            at_ms: at,
+            what: What::ToolDone { name: id.into(), ok, size: 1, preview: String::new() },
+        };
+        let steps = vec![
+            tool(10, "a", "Read", "src/main.rs"),
+            done(11, "a", true),
+            tool(20, "b", "Bash", "cargo build"),
+            done(21, "b", false),
+            tool(30, "c", "Read", "src/lib.rs"),
+            done(31, "c", true),
+            tool(40, "d", "Read", "other/main.rs"),
+            tool(50, "e", "Bash", "cargo test"),
+        ];
+        feed.add("s", false, Parsed { steps, ..Default::default() });
+        let map = map(&feed.sessions[0]);
+        let tools: Vec<&str> = map.iter().map(|b| b.tool.as_str()).collect();
+        assert_eq!(tools, ["Read", "Bash"]);
+        let read = &map[0];
+        assert_eq!((read.count, read.last_ms, read.failed_ms, read.waiting), (3, 40, None, true));
+        // Two files share a name, so they share a leaf; the latest use comes first.
+        let leaves: Vec<(&str, u32)> = read.leaves.iter().map(|l| (l.label.as_str(), l.count)).collect();
+        assert_eq!(leaves, [("main.rs", 2), ("lib.rs", 1)]);
+        assert_eq!(read.leaves[0].full, "other/main.rs");
+        let bash = &map[1];
+        assert_eq!((bash.count, bash.failed_ms, bash.waiting), (2, Some(21), true));
     }
 }
