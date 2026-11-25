@@ -2,7 +2,7 @@
 
 Maestro is a planned replacement for the resource manager and the everyday operating-system interfaces, built for a machine whose main job is running AI agents. It shows everything running on your PC, shuts down whatever the current task does not need, and gives you one visual, manageable place to direct the agents doing the work.
 
-**Status: phase 1 is running.** The app is a native Windows program that reads the machine and draws it. It is read-only: it cannot stop, block or change anything yet. This repo is public from day one so the design, the doubts and the decisions are all in the open.
+**Status: phases 1 and 2 are running in a first form.** The app is a native Windows program that reads the machine, draws it, and can now act on it: pause, resume and end programs, clear the machine for a task, block a program on the network and switch an adapter off, each with a way back. This repo is public from day one so the design, the doubts and the decisions are all in the open.
 
 ## The vision
 
@@ -31,7 +31,17 @@ The full plan, including what each hard part takes, is in [docs/plan.md](docs/pl
 - **Four views of the same data:** tiles, a heat map sized by memory and coloured by load, a tree of what started what, and a map that joins programs to the programs they started.
 - **A first sorting of processes:** critical to Windows, part of Windows, background service, or app. A process using a critical Windows name from outside the Windows folder is flagged. This is judged from names, file locations and parentage; signatures are not checked yet.
 
-Not there yet: graphics load, hostnames and locations for connections, signature checks, and every control. See the plan for the order.
+- **Controls, with a way back:**
+  - **Pause and resume** a program. Pausing freezes it so it uses no processor, and nothing is lost.
+  - **End** a program, after a second click to confirm.
+  - **Clear the machine for a task.** Pick the program that matters and Maestro lists what could be paused, leaving the task, what started it, what it started and anything on your keep list running. You untick what you want left alone, then pause the rest in one go.
+  - **Block a program on the network** with Windows Firewall rules, and **switch a network adapter off**. Windows asks for permission before either.
+  - **An action log** along the bottom with an Undo button on everything that can be undone, and Resume all.
+- **Guard rails:** processes critical to Windows and parts of Windows are locked and cannot be acted on. Everything Maestro pauses is written to disk, resumed when Maestro closes, and offered for resuming at the next start if Maestro crashed.
+
+Not there yet: graphics load, hostnames and locations for connections, signature checks, saved task profiles, and hardware controls. See the plan for the order.
+
+What has been tested: pause, resume, end, the locks and resume-on-close were run against a throwaway process, and the planning and script-building logic has unit tests. The network block and adapter switch need Windows' permission prompt and have not been run yet. The buttons have been seen on screen but not clicked through by a person.
 
 ## Build and run
 
@@ -47,6 +57,9 @@ Other ways to start it:
 - `cargo run -- --dump` prints one sample of the machine as JSON and exits, without opening a window.
 - `cargo run -- --screenshot shot.png` opens the window, saves one picture of it and exits.
 - `cargo run --release -- --profile` times each part of a sample, to show what the monitor itself costs.
+- `cargo run -- --pause 1234`, `--resume 1234` and `--end 1234` act on one process by number, under the same locks as the buttons.
+- `cargo run -- --focus-plan code.exe` lists what clearing the machine for that program would pause. It changes nothing.
+- `cargo test` runs the unit tests.
 
 It is built and tested on Windows 11. Linux and macOS are planned for phase 4 and are untested.
 

@@ -2,6 +2,7 @@
 //!
 //! Phase 1 is read-only. Nothing in this file changes the machine.
 
+mod controls;
 mod views;
 
 pub use views::View;
@@ -49,12 +50,16 @@ pub struct App {
     snap: Option<Snapshot>,
     samples: u32,
     selected: Option<String>,
+    /// Open the clear-the-machine preview for the selected program at start.
+    preview_focus: bool,
     sort: Sort,
     view: View,
     /// Show only programs of this class. `None` shows all of them.
     class_filter: Option<Class>,
     mold: HashMap<String, views::Blob>,
     filter: String,
+    /// Phase 2: what Maestro has changed, and the way back.
+    ctl: controls::State,
     shot: Option<Shot>,
 }
 
@@ -65,12 +70,20 @@ struct Group<'a> {
     cpu: f32,
     mem: u64,
     sockets: usize,
+    /// True when Maestro has paused any of its processes.
+    paused: bool,
     /// The most notable class among the program's processes.
     class: Class,
 }
 
 impl App {
-    pub fn new(cc: &eframe::CreationContext<'_>, screenshot: Option<PathBuf>, view: View) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        screenshot: Option<PathBuf>,
+        view: View,
+        select: Option<String>,
+        preview_focus: bool,
+    ) -> Self {
         apply_style(&cc.egui_ctx);
 
         // Sample on a background thread so reading the machine never stalls the window.
@@ -91,12 +104,14 @@ impl App {
             rx,
             snap: None,
             samples: 0,
-            selected: None,
+            preview_focus: preview_focus && select.is_some(),
+            selected: select,
             sort: Sort::Cpu,
             view,
             class_filter: None,
             mold: HashMap::new(),
             filter: String::new(),
+            ctl: controls::State::load(),
             shot: screenshot.map(|path| Shot {
                 path,
                 requested: false,
@@ -152,14 +167,23 @@ impl eframe::App for App {
 
         let sockets_by_pid = count_sockets(&snap);
         let classes = classify(&snap);
-        let mut groups = group_processes(&snap, &sockets_by_pid, &classes);
+        self.ctl.poll();
+        self.ctl.sync(&snap);
+        let paused = self.ctl.paused_pids();
+        let mut groups = group_processes(&snap, &sockets_by_pid, &classes, &paused);
         match self.sort {
             Sort::Cpu => groups.sort_by(|a, b| b.cpu.total_cmp(&a.cpu)),
             Sort::Memory => groups.sort_by(|a, b| b.mem.cmp(&a.mem)),
             Sort::Sockets => groups.sort_by(|a, b| b.sockets.cmp(&a.sockets)),
         }
 
+        if std::mem::take(&mut self.preview_focus) {
+            if let Some(task) = self.selected.clone() {
+                self.open_focus(task);
+            }
+        }
         hud(ctx, &snap, groups.len());
+        self.action_log(ctx);
 
         if let Some(name) = self.selected.clone() {
             match groups.iter().find(|g| g.name == name) {
@@ -168,7 +192,9 @@ impl eframe::App for App {
                     egui::SidePanel::right("detail")
                         .resizable(true)
                         .default_width(420.0)
-                        .show(ctx, |ui| detail(ui, &snap, group, &mut open));
+                        .show(ctx, |ui| {
+                            detail(ui, &snap, group, &mut open, |ui| self.actions_ui(ui, group))
+                        });
                     if !open {
                         self.selected = None;
                     }
@@ -182,11 +208,15 @@ impl eframe::App for App {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    rooms(ui, &snap);
+                    if let Some(adapter) = rooms(ui, &snap) {
+                        self.open_adapter(adapter);
+                    }
                     ui.add_space(14.0);
                     self.crew(ui, &snap, &groups);
                 });
         });
+
+        self.control_windows(ctx, &snap, &groups, &classes);
 
         self.snap = Some(snap);
     }
@@ -214,7 +244,7 @@ fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize) {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("MAESTRO").color(TEAL).strong().size(18.0));
                 ui.add_space(8.0);
-                ui.label(RichText::new("LIVE · READ-ONLY").color(AMBER).size(11.0));
+                ui.label(RichText::new("LIVE").color(AMBER).size(11.0));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let os = format!(
                         "{} {}",
@@ -242,7 +272,9 @@ fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize) {
 }
 
 /// The base's rooms: one per part of the machine.
-fn rooms(ui: &mut Ui, snap: &Snapshot) {
+/// Returns the network adapter the user clicked, if any.
+fn rooms(ui: &mut Ui, snap: &Snapshot) -> Option<String> {
+    let picked = std::cell::RefCell::new(None);
     type Body<'a> = &'a dyn Fn(&mut Ui);
     let all: [(&str, &str, Body<'_>); 5] = [
 
@@ -344,15 +376,16 @@ fn rooms(ui: &mut Ui, snap: &Snapshot) {
                     .total_cmp(&(a.down_bytes_per_sec + a.up_bytes_per_sec))
             });
             for n in active.iter().take(3) {
-                ui.label(
-                    RichText::new(format!(
-                        "{}  {} down, {} up",
-                        clip(&n.name, 22),
-                        rate(n.down_bytes_per_sec),
-                        rate(n.up_bytes_per_sec)
-                    ))
-                    .size(11.0),
-                );
+                let text = RichText::new(format!(
+                    "{}  {} down, {} up",
+                    clip(&n.name, 22),
+                    rate(n.down_bytes_per_sec),
+                    rate(n.up_bytes_per_sec)
+                ))
+                .size(11.0);
+                if ui.link(text).on_hover_text("Adapter actions").clicked() {
+                    *picked.borrow_mut() = Some(n.name.clone());
+                }
             }
         }),
 
@@ -382,6 +415,7 @@ fn rooms(ui: &mut Ui, snap: &Snapshot) {
         });
         ui.add_space(GAP);
     }
+    picked.into_inner()
 }
 
 fn room(ui: &mut Ui, width: f32, title: &str, subtitle: &str, body: &dyn Fn(&mut Ui)) {
@@ -478,6 +512,9 @@ fn tile(ui: &mut Ui, group: &Group<'_>, selected: bool) -> egui::Response {
         );
     }
     let mut line = format!("{:.1}%  {}", group.cpu, bytes(group.mem));
+    if group.paused {
+        line.insert_str(0, "paused  ");
+    }
     if group.sockets > 0 {
         line.push_str(&format!("  net {}", group.sockets));
     }
@@ -499,7 +536,13 @@ fn tile(ui: &mut Ui, group: &Group<'_>, selected: bool) -> egui::Response {
 }
 
 /// Everything known about the selected program.
-fn detail(ui: &mut Ui, snap: &Snapshot, group: &Group<'_>, open: &mut bool) {
+fn detail(
+    ui: &mut Ui,
+    snap: &Snapshot,
+    group: &Group<'_>,
+    open: &mut bool,
+    actions: impl FnOnce(&mut Ui),
+) {
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         ui.label(RichText::new(group.name).strong().size(17.0));
@@ -533,6 +576,7 @@ fn detail(ui: &mut Ui, snap: &Snapshot, group: &Group<'_>, open: &mut bool) {
             .italics()
             .size(10.0),
     );
+    actions(ui);
     ui.separator();
 
     let names: HashMap<u32, &str> = snap
@@ -638,6 +682,7 @@ fn group_processes<'a>(
     snap: &'a Snapshot,
     sockets: &HashMap<u32, usize>,
     classes: &HashMap<u32, Class>,
+    paused: &std::collections::HashSet<u32>,
 ) -> Vec<Group<'a>> {
     let mut by_name: HashMap<&str, Group<'a>> = HashMap::new();
     for p in &snap.processes {
@@ -647,6 +692,7 @@ fn group_processes<'a>(
             cpu: 0.0,
             mem: 0,
             sockets: 0,
+            paused: false,
             class: Class::App,
         });
         group.cpu += p.cpu_percent;
@@ -655,6 +701,7 @@ fn group_processes<'a>(
         group.class = group
             .class
             .max(classes.get(&p.pid).copied().unwrap_or(Class::App));
+        group.paused |= paused.contains(&p.pid);
         group.procs.push(p);
     }
     let mut groups: Vec<_> = by_name.into_values().collect();

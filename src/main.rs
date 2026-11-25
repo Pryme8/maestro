@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod classify;
+mod control;
 mod telemetry;
 mod ui;
 #[cfg(all(windows, target_pointer_width = "64"))]
@@ -14,6 +15,25 @@ use std::time::Duration;
 
 fn main() -> eframe::Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    attach_console();
+
+    // Command-line controls. They follow the same rules as the buttons.
+    for action in ["--pause", "--resume", "--end"] {
+        if let Some(pid) = arg_after(&args, action).and_then(|v| v.parse::<u32>().ok()) {
+            std::process::exit(command_line_action(action, pid));
+        }
+    }
+    // `--focus-plan <program>` lists what clearing the machine would pause. It changes nothing.
+    if let Some(task) = arg_after(&args, "--focus-plan") {
+        let snap = telemetry::Sampler::new().sample();
+        let classes = classify::classify(&snap);
+        let keep = control::Journal::load().keep;
+        let plan = control::focus_plan(&snap, &classes, task, &keep);
+        println!("left running: {}", plan.kept.join(", "));
+        println!("apps that would be paused: {}", plan.apps.join(", "));
+        println!("services offered, not paused by default: {}", plan.services.join(", "));
+        return Ok(());
+    }
 
     // `--dump` prints one telemetry sample as JSON and exits, without a window.
     if args.iter().any(|a| a == "--dump") {
@@ -56,6 +76,11 @@ fn main() -> eframe::Result<()> {
         .and_then(|name| ui::View::parse(name))
         .unwrap_or(ui::View::Tiles);
 
+    // `--select <program>` opens with that program's details showing, and
+    // `--preview-focus` also opens its clear-the-machine preview. Neither changes anything.
+    let select = arg_after(&args, "--select").map(str::to_string);
+    let preview_focus = args.iter().any(|a| a == "--preview-focus");
+
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Maestro")
         .with_inner_size([1320.0, 860.0])
@@ -70,6 +95,65 @@ fn main() -> eframe::Result<()> {
             viewport,
             ..Default::default()
         },
-        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, view)))),
+        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, view, select, preview_focus)))),
     )
 }
+
+fn arg_after<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+    args.iter()
+        .position(|a| a == flag)
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str)
+}
+
+/// Pause, resume or end one process from the command line. Returns the exit code.
+fn command_line_action(action: &str, pid: u32) -> i32 {
+    let snap = telemetry::Sampler::new().sample();
+    let classes = classify::classify(&snap);
+    let Some(process) = snap.processes.iter().find(|p| p.pid == pid) else {
+        eprintln!("No process has the number {pid}.");
+        return 2;
+    };
+    let class = classes.get(&pid).copied().unwrap_or(classify::Class::App);
+    if let Err(reason) = control::check(class, pid) {
+        eprintln!("{} is locked. {reason}", process.name);
+        return 3;
+    }
+    let mut journal = control::Journal::load();
+    let entry = control::Paused::of(process);
+    let result = match action {
+        "--pause" if journal.paused.contains(&entry) => Err("It is already paused.".to_string()),
+        "--pause" => control::suspend(pid).map(|()| journal.paused.push(entry)),
+        "--resume" => control::resume(pid).map(|()| journal.paused.retain(|p| p != &entry)),
+        _ => control::end(pid).map(|()| journal.paused.retain(|p| p != &entry)),
+    };
+    match result {
+        Ok(()) => {
+            journal.save();
+            println!("{} {} ({pid})", &action[2..], process.name);
+            0
+        }
+        Err(reason) => {
+            eprintln!("Could not {} {}. {reason}", &action[2..], process.name);
+            1
+        }
+    }
+}
+
+/// A release build has no console of its own, so borrow the one it was
+/// started from. That lets the command-line flags print their results.
+#[cfg(windows)]
+fn attach_console() {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn AttachConsole(process: u32) -> i32;
+    }
+    const PARENT: u32 = u32::MAX;
+    // SAFETY: a plain call that fails harmlessly when there is no parent console.
+    unsafe {
+        AttachConsole(PARENT);
+    }
+}
+
+#[cfg(not(windows))]
+fn attach_console() {}

@@ -1,6 +1,6 @@
 # Maestro: plan
 
-As of 2026-11-24. Phase 1 is running in a first, read-only form. Nothing after it is built.
+As of 2026-11-24. Phases 1 and 2 are running in a first form. Nothing after them is built.
 
 ## Vision
 
@@ -18,7 +18,10 @@ This is the foundation, built in phases 1 and 2.
 - **Task profiles:** for each task, the app works out what needs to run. Everything else is suspended or stopped so the machine's resources go to the task.
 - **Undo:** every stop is reversible. Ending a task restores what was running before it.
 - **Protected processes:** processes the operating system needs are never stopped, and you can pin anything else you want kept.
-- **Controls:** process, network and adapter actions from one interface, replacing the resource manager.
+- **Controls:** process, network and adapter actions from one interface, replacing the resource manager. Built so far: pause, resume and end a program; block a program at the firewall; switch an adapter off; and an action log with undo.
+- **Clearing the machine:** built as a preview. You pick the task, the app lists what could be paused, and nothing is paused until you confirm. The task's family is always left running: what started it and what it started. Saved, named profiles per task come next.
+- **Acting on a process does not reach what it started.** Pausing a launcher leaves the program it launched running. Actions today apply to every process with the same program name; acting on a whole family tree at once is the next control to add.
+- **Never left frozen:** everything paused is written to disk first, resumed when the app closes, and offered for resuming at the next start after a crash.
 - **Many views of the same data:** no single picture suits every question, so the running programs can be drawn several ways. Built so far: tiles, a heat map sized by memory and coloured by load, a tree of what started what, and a map that joins programs to the programs they started. More views are welcome wherever they help a person understand and control what is going on.
 - **Critical or extra:** every process is sorted in plain words: critical to Windows, part of Windows, background service, or app. A process using a critical Windows name from outside the Windows folder is flagged. Today this is judged from names, file locations and parentage. Signature checks come next, and this sorting is what task profiles will use to decide what is safe to stop.
 
