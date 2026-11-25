@@ -637,9 +637,9 @@ fn rooms(ui: &mut Ui, snap: &Snapshot) -> Option<String> {
             top.sort_by(|a, b| (b.1 .0, b.1 .1).partial_cmp(&(a.1 .0, a.1 .1)).unwrap_or(std::cmp::Ordering::Equal));
             ui.add_space(4.0);
             for (name, (load, mem)) in top.iter().take(3) {
-                ui.label(
-                    RichText::new(format!("{}  {:.0}%, {}", clip(name, 18), load, bytes(*mem))).size(11.0),
-                );
+                // No memory figure means none, or one the system overstated.
+                let held = if *mem > 0 { format!(", {}", bytes(*mem)) } else { String::new() };
+                ui.label(RichText::new(format!("{}  {:.0}%{held}", clip(name, 18), load)).size(11.0));
             }
         }),
     ];
