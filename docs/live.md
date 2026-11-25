@@ -52,6 +52,21 @@ A session started from Maestro asks before every step that needs permission, suc
 
 When you start a session you choose one of three settings: ask each time, let file edits through and ask about everything else, or refuse everything so it can only read and search. Allowing a kind of step for the rest of a session, and changing a step before allowing it, are not built.
 
+## More than one account
+
+You can keep several sign-ins for Claude Code, such as a work account and a personal one, and choose which one a session runs under when you start it.
+
+- **How it is kept apart.** Claude Code keeps its sign-in, settings and history in one folder, and a variable it documents, `CLAUDE_CONFIG_DIR`, says which. Each named sign-in gets a folder of its own under Maestro's data folder. A session started under a name is pointed at that folder and stays there until it ends, so two accounts never share a sign-in, a setting or a history file.
+- **Adding one.** Open Claude Code under Services, type a name and press **Add sign-in**. Then press its **Sign in…**, which opens a terminal running `claude auth login` for that sign-in only, and sign in there with the account you want it to be.
+- **Using a key instead.** Give the name of an environment variable that holds an API key for that sign-in. Maestro keeps the variable's name and hands the key to the tool when a session starts. The key is never written down or shown.
+- **Choosing.** The start form has a **Sign-in** list: Claude Code's own, or any you added. The session's name shows which it runs as.
+- **What a new sign-in does not have.** It starts clean: your settings, connectors and memory from Claude Code's own folder are not copied into it.
+- **Forgetting one** takes it off the list and leaves its folder in place, and says where the folder is.
+
+Maestro makes the folders and passes the variable. It does not open the files the tool keeps in them. Sessions started outside Maestro under a named sign-in are not followed yet; only those under Claude Code's own folder are.
+
+Each session can also be given a **Model**: Claude Code's own setting, one of its short names (haiku, sonnet, opus, fable), or a full model name. A small job on a cheaper model uses less of your plan.
+
 ## Services
 
 Each agent tool is one line that opens for detail, and the ones that need something from you open by themselves. For each tool:
@@ -79,6 +94,8 @@ A program started from the macOS Finder or Dock does not get the `PATH` your ter
 
 - `--services` prints each tool's state, how it was checked and what to do about it.
 - `--watch` prints what your Claude Code sessions are doing as it happens. `--watch-once` prints their latest steps and exits.
+- `--logins` lists the named sign-ins and whether each is ready. `--login-add <name>` adds one, with `--key-var <VARIABLE>` for one that uses an API key, and `--login-forget <name>` takes one off the list.
+- `--run` takes `--as <name>` to run under a named sign-in and `--model <name>` to pick the model.
 - `--run <folder> "<request>"` starts Claude Code in that folder, read-only, and prints each step until it answers. Add `--answer refuse` or `--answer allow` to have it ask before each step that needs permission and give every question that same answer. `--answer allow` lets it change files and run commands unasked, so use it only in a folder you can throw away.
 
 If your Claude Code session files are somewhere else, set `MAESTRO_CLAUDE_DIR` to the folder that holds them.

@@ -54,6 +54,11 @@ These follow the same locks as the buttons: see [Controls](controls.md#guard-rai
 | `--watch` | Prints what your Claude Code sessions are doing as it happens |
 | `--watch-once` | Prints their latest steps and exits |
 | `--run <folder> "<request>"` | Starts Claude Code in that folder, read-only, and prints each step until it answers |
+| `--run … --model <name>` | Picks the model for that run: a short name such as `haiku`, or a full model name |
+| `--run … --as <name>` | Runs under a named sign-in instead of Claude Code's own |
+| `--logins` | Lists the named sign-ins, whether each is ready, and its folder |
+| `--login-add <name> [--key-var <VARIABLE>]` | Adds a sign-in with its own folder, or one that takes an API key from that variable |
+| `--login-forget <name>` | Takes a sign-in off the list and leaves its folder in place |
 | `--run <folder> "<request>" --answer allow\|refuse` | The same, but it asks before each step that needs permission and every question gets that answer |
 
 See [Agents](agents.md) and [Live](live.md).

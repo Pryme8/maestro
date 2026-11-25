@@ -65,6 +65,8 @@ Blocking one program on Linux takes a control group for the program and an nftab
 - `--services` was run on Windows, where it reported Claude Code as needing sign-in and Ollama as running, both correctly. The Sign in button has not been pressed.
 - Reading session files was run from the command line against two real sessions on Windows.
 - Three signed-in runs were driven from the command line on Windows against the real `claude` command. One ran a shell command and its call and result showed as they happened. One asked to write a file and was refused: no file was made, the reason reached the agent and it said it had not been allowed. One asked the same and was allowed: the file was written. Each cost between about $0.15 and $0.38 by the tool's own estimate.
+- A run on `--model haiku` was driven for real and reported that model; it cost about $0.07 by the tool's own estimate.
+- Named sign-ins were run from the command line on Windows in a scratch data folder: adding, refusing a name that would share a folder, listing with states, and starting runs. A run under a sign-in that had never been signed in came back as not logged in while Claude Code's own sign-in stayed signed in, which shows the two are kept apart. A run under a key sign-in whose variable was not set was refused before anything started. Signing a second account in, and a run under it, have not been done: that takes a second account. The sign-in list and picker on the Live page have not been seen on screen.
 - The Allow and Refuse buttons use the same code as those runs but have not been clicked. Sending a second message and interrupting were only run while the tool was signed out, when every request came back as a sign-in error.
 
 **Timeline**

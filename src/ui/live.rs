@@ -17,6 +17,11 @@ pub(super) struct LiveUi {
     leave: Leave,
     /// The model a new session runs on. Empty means the tool's own setting.
     model: String,
+    /// The named sign-in a new session runs under. `None` is the tool's own.
+    login: Option<String>,
+    /// A sign-in being typed in, and the key variable for it, if any.
+    new_login: String,
+    new_key_var: String,
     say: String,
     /// Why a step is being refused, sent back to the agent.
     why: String,
@@ -66,6 +71,9 @@ impl LiveUi {
             prompt: String::new(),
             leave: Leave::AskFirst,
             model: String::new(),
+            login: None,
+            new_login: String::new(),
+            new_key_var: String::new(),
             say: String::new(),
             why: String::new(),
             problem: None,
@@ -191,6 +199,33 @@ impl App {
                         .desired_width(620.0),
                 );
                 ui.horizontal(|ui| {
+                    ui.label(RichText::new("Sign-in").color(DIM).size(11.0));
+                    let names: Vec<String> = lv
+                        .services
+                        .lock()
+                        .map(|list| {
+                            list.iter()
+                                .filter(|s| s.id == "claude-code")
+                                .flat_map(|s| s.logins.iter().map(|l| l.login.name.clone()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    egui::ComboBox::from_id_salt("live-login")
+                        .selected_text(lv.login.clone().unwrap_or_else(|| "Claude Code's own".to_string()))
+                        .width(190.0)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut lv.login, None, "Claude Code's own");
+                            for name in names {
+                                ui.selectable_value(&mut lv.login, Some(name.clone()), name);
+                            }
+                        });
+                    ui.label(
+                        RichText::new("The session stays under this sign-in until it ends. Add more under Services.")
+                            .color(DIM)
+                            .size(11.0),
+                    );
+                });
+                ui.horizontal(|ui| {
                     ui.label(RichText::new("Model").color(DIM).size(11.0));
                     let shown = if lv.model.trim().is_empty() {
                         "Claude Code's own setting".to_string()
@@ -240,7 +275,9 @@ impl App {
                         let leave = lv.leave;
                         let wake = ui.ctx().clone();
                         let folder = std::path::PathBuf::from(lv.folder.trim());
-                        match Run::start(lv.feed.clone(), &folder, lv.prompt.trim(), leave, &lv.model, move || {
+                        let logins = crate::logins::Logins::load();
+                        let who = lv.login.as_deref().and_then(|name| logins.find(name));
+                        match Run::start(lv.feed.clone(), &folder, lv.prompt.trim(), leave, &lv.model, who, move || {
                             wake.request_repaint()
                         }) {
                             Ok(run) => {
@@ -475,7 +512,7 @@ impl App {
         // A run that could not sign in means the services need another look.
         let sign_in_failed = session.ours
             && session.steps.iter().rev().take(4).any(|s| {
-                matches!(&s.what, What::Finished { ok: false, text, .. } if text.contains("authenticate"))
+                matches!(&s.what, What::Finished { ok: false, text, .. } if text.contains("authenticate") || text.contains("logged in"))
             });
         let busy = now.saturating_sub(session.last_ms) < 15_000;
         let list_height = if lv.as_map {
@@ -749,14 +786,27 @@ impl LiveUi {
     fn claude_block(&self) -> Option<String> {
         let list = self.services.lock().ok()?;
         let claude = list.iter().find(|s| s.id == "claude-code")?;
-        (claude.state != services::State::Ready)
-            .then(|| format!("Claude Code: {}. See Services above.", claude.state.label()))
+        if claude.state == services::State::Missing {
+            return Some("Claude Code is not installed. See Services above.".to_string());
+        }
+        match &self.login {
+            // A named sign-in stands or falls by itself, whatever the tool's own is.
+            Some(name) => match claude.logins.iter().find(|l| &l.login.name == name) {
+                Some(state) if state.ready => None,
+                Some(state) => Some(format!("The sign-in {name}: {}. See Services above.", state.text)),
+                None => Some(format!("The sign-in {name} is not on the list any more.")),
+            },
+            None => (claude.state != services::State::Ready)
+                .then(|| format!("Claude Code: {}. See Services above.", claude.state.label())),
+        }
     }
 
     /// Each tool, whether it can be used, how that was checked and what to do.
     fn services_ui(&mut self, ui: &mut Ui) {
         let ctx = ui.ctx().clone();
-        let mut sign_in = None;
+        let mut sign_in: Option<(&'static str, Vec<(String, std::ffi::OsString)>)> = None;
+        let mut forget: Option<String> = None;
+        let mut add = false;
         let needs: usize = self
             .services
             .lock()
@@ -810,7 +860,7 @@ impl LiveUi {
                                 ))
                                 .clicked()
                             {
-                                sign_in = Some(command);
+                                sign_in = Some((command, Vec::new()));
                             }
                         }
                     });
@@ -819,12 +869,100 @@ impl LiveUi {
                         ui.label(RichText::new(format!("- {step}")).color(AMBER).size(11.0));
                     }
                     ui.label(RichText::new(format!("How this was checked: {}", s.how)).color(DIM).size(10.0));
+                    if s.id == "claude-code" {
+                        ui.add_space(4.0);
+                        ui.label(RichText::new("More sign-ins, kept apart").color(TEAL).size(11.0));
+                        ui.label(
+                            RichText::new(
+                                "Each one has its own folder for Claude Code's sign-in, settings and history, \
+                                 so a work account and a personal one never share anything. A session is \
+                                 started under one and stays under it. Maestro does not open the files in \
+                                 those folders.",
+                            )
+                            .color(DIM)
+                            .size(11.0),
+                        );
+                        for l in &s.logins {
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new(&l.login.name).strong().size(12.0));
+                                let colour = if l.ready { TEAL } else { AMBER };
+                                ui.label(RichText::new(&l.text).color(colour).size(11.0));
+                                if l.login.key_var.is_none() && !l.ready {
+                                    if ui
+                                        .button("Sign in…")
+                                        .on_hover_text(
+                                            "Opens a terminal running `claude auth login` for this sign-in only. \
+                                             Sign in there with the account you want it to be.",
+                                        )
+                                        .clicked()
+                                    {
+                                        match l.login.env() {
+                                            Ok(env) => sign_in = Some(("claude auth login", env)),
+                                            Err(problem) => self.problem = Some(problem),
+                                        }
+                                    }
+                                }
+                                if ui
+                                    .small_button("forget")
+                                    .on_hover_text(format!(
+                                        "Takes it off this list. Its folder stays, with its sign-in and history:\n{}",
+                                        l.login.folder().display()
+                                    ))
+                                    .clicked()
+                                {
+                                    forget = Some(l.login.name.clone());
+                                }
+                            });
+                        }
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.new_login)
+                                    .hint_text("name, such as Work")
+                                    .desired_width(150.0),
+                            );
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.new_key_var)
+                                    .hint_text("key variable, or leave empty")
+                                    .desired_width(190.0),
+                            )
+                            .on_hover_text(
+                                "Leave empty to sign in with an account. Or give the name of an environment \
+                                 variable that holds an API key for this sign-in. Maestro keeps the name, \
+                                 never the key.",
+                            );
+                            add = ui
+                                .add_enabled(!self.new_login.trim().is_empty(), egui::Button::new("Add sign-in"))
+                                .clicked();
+                        });
+                    }
                         });
                 }
             });
-        if let Some(command) = sign_in {
-            if let Err(problem) = services::open_sign_in(command) {
+        if let Some((command, env)) = sign_in {
+            if let Err(problem) = services::open_sign_in(command, &env) {
                 self.problem = Some(problem);
+            }
+        }
+        if add || forget.is_some() {
+            let mut logins = crate::logins::Logins::load();
+            let result = match &forget {
+                Some(name) => logins.forget(name).map(|_| {
+                    if self.login.as_ref() == Some(name) {
+                        self.login = None;
+                    }
+                }),
+                None => logins.add(&self.new_login, Some(&self.new_key_var)).map(|_| {
+                    self.new_login.clear();
+                    self.new_key_var.clear();
+                }),
+            };
+            match result {
+                Ok(()) => {
+                    logins.save();
+                    self.problem = None;
+                    self.check_services(&ctx);
+                }
+                Err(problem) => self.problem = Some(problem),
             }
         }
     }

@@ -629,9 +629,15 @@ impl Run {
         prompt: &str,
         leave: Leave,
         model: &str,
+        who: Option<&crate::logins::Login>,
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Result<Run, String> {
         let model = model_arg(model)?;
+        // The sign-in is fixed here, for the whole life of the session.
+        let env = match who {
+            Some(login) => login.env()?,
+            None => Vec::new(),
+        };
         if !cwd.is_dir() {
             return Err(format!("{} is not a folder.", cwd.display()));
         }
@@ -642,6 +648,7 @@ impl Run {
         command
             .args(claude_args(leave))
             .args(model.iter().flat_map(|name| ["--model", name.as_str()]))
+            .envs(env.iter().map(|(k, v)| (k, v)))
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -663,7 +670,8 @@ impl Run {
         if let Ok(mut feed) = feed.lock() {
             let mut first = one_step(What::Asked(clip(prompt, 2000)));
             first.cwd = Some(cwd.to_string_lossy().into_owned());
-            first.title = Some(format!("Run {number}: {}", clip(prompt, 40)));
+            let under = who.map(|l| format!(" as {}", l.name)).unwrap_or_default();
+            first.title = Some(format!("Run {number}{under}: {}", clip(prompt, 40)));
             feed.add(&id, true, first);
         }
 
@@ -1065,7 +1073,19 @@ pub fn cli(args: &[String]) -> Option<i32> {
         let leave = if answer.is_some() { Leave::AskFirst } else { Leave::ReadOnly };
         // `--model <name>` picks the model; without it the tool's own setting is used.
         let model = after("--model").and_then(|i| args.get(i + 1)).map_or("", String::as_str);
-        let mut run = match Run::start(feed.clone(), Path::new(folder), prompt, leave, model, || {}) {
+        // `--as <name>` runs under a named sign-in instead of the tool's own.
+        let logins = crate::logins::Logins::load();
+        let who = match after("--as").and_then(|i| args.get(i + 1)) {
+            Some(name) => match logins.find(name) {
+                Some(login) => Some(login),
+                None => {
+                    eprintln!("There is no sign-in called {name}. Add one with --login-add.");
+                    return Some(2);
+                }
+            },
+            None => None,
+        };
+        let mut run = match Run::start(feed.clone(), Path::new(folder), prompt, leave, model, who, || {}) {
             Ok(run) => run,
             Err(problem) => {
                 eprintln!("{problem}");
@@ -1347,7 +1367,7 @@ mod tests {
         // A bad name stops the run before anything is started.
         let feed = Arc::new(Mutex::new(Feed::default()));
         let here = std::env::temp_dir();
-        assert!(Run::start(feed.clone(), &here, "hi", Leave::ReadOnly, "--bare", || {}).is_err());
+        assert!(Run::start(feed.clone(), &here, "hi", Leave::ReadOnly, "--bare", None, || {}).is_err());
         assert!(feed.lock().unwrap().sessions.is_empty());
     }
 

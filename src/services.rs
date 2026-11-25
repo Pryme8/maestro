@@ -60,6 +60,17 @@ pub struct Service {
     pub fix: Vec<String>,
     /// A command that signs in, when the tool has one.
     pub sign_in: Option<&'static str>,
+    /// Named sign-ins kept apart from the tool's own, and whether each can be used.
+    pub logins: Vec<LoginState>,
+}
+
+/// One named sign-in and whether a session can be started under it.
+#[derive(Clone, Debug)]
+pub struct LoginState {
+    pub login: crate::logins::Login,
+    pub ready: bool,
+    /// Its state in plain words.
+    pub text: String,
 }
 
 /// Find a command the way a terminal would: each folder on the path, with
@@ -92,8 +103,13 @@ fn key_set(name: &str) -> bool {
 
 /// Run a command with no window and give back what it printed.
 fn output(program: &Path, args: &[&str]) -> Option<String> {
+    output_with(program, args, &[])
+}
+
+fn output_with(program: &Path, args: &[&str], env: &[(String, std::ffi::OsString)]) -> Option<String> {
     let mut command = Command::new(program);
     command.args(args).stdin(Stdio::null()).stderr(Stdio::null());
+    command.envs(env.iter().map(|(k, v)| (k, v)));
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -121,6 +137,46 @@ pub fn claude_state(installed: bool, signed_in: Option<bool>, key: bool) -> Stat
         (true, Some(false)) => State::SignIn,
         (true, None) => State::Unknown,
     }
+}
+
+/// Whether one named sign-in can be used, checked the same way as the tool's own.
+fn login_state(login: &crate::logins::Login, claude: Option<&Path>) -> LoginState {
+    let (ready, text) = match (&login.key_var, login.key_set()) {
+        (Some(var), Some(true)) => (true, format!("uses the key in {var}")),
+        (Some(var), _) => (false, format!("its key variable {var} is not set")),
+        (None, _) => {
+            let folder = login.folder();
+            // A folder that was never made has never been signed in to.
+            let signed_in = folder.is_dir().then_some(()).and(claude).and_then(|claude| {
+                let env = [(crate::logins::CONFIG_VAR.to_string(), folder.clone().into_os_string())];
+                output_with(claude, &["auth", "status"], &env)
+                    .as_deref()
+                    .and_then(claude_signed_in)
+            });
+            match signed_in {
+                Some(true) => (true, "signed in".to_string()),
+                _ => (false, "not signed in yet".to_string()),
+            }
+        }
+    };
+    LoginState {
+        login: login.clone(),
+        ready,
+        text,
+    }
+}
+
+/// Every named sign-in with its state in words, for the command line.
+pub fn login_states(logins: &crate::logins::Logins) -> Vec<(crate::logins::Login, String)> {
+    let claude = find("claude");
+    logins
+        .claude
+        .iter()
+        .map(|l| {
+            let state = login_state(l, claude.as_deref());
+            (state.login, state.text)
+        })
+        .collect()
 }
 
 fn claude() -> Service {
@@ -171,6 +227,11 @@ fn claude() -> Service {
             .to_string(),
         fix,
         sign_in: (state == State::SignIn).then_some("claude auth login"),
+        logins: crate::logins::Logins::load()
+            .claude
+            .iter()
+            .map(|l| login_state(l, path.as_deref()))
+            .collect(),
     }
 }
 
@@ -222,6 +283,7 @@ fn seen_only(
         ),
         fix,
         sign_in: None,
+        logins: Vec::new(),
     }
 }
 
@@ -257,6 +319,7 @@ fn ollama() -> Service {
         how: "Looked for `ollama` on the path and tried to open its port on this computer.".to_string(),
         fix,
         sign_in: None,
+        logins: Vec::new(),
     }
 }
 
@@ -320,15 +383,22 @@ pub fn check() -> Vec<Service> {
 
 /// Open a terminal running a sign-in command, for the user to finish there.
 /// This is the one place Maestro opens a window, and only when asked to.
-pub fn open_sign_in(command: &str) -> Result<(), String> {
+pub fn open_sign_in(command: &str, env: &[(String, std::ffi::OsString)]) -> Result<(), String> {
     let result = if cfg!(windows) {
-        Command::new("cmd").args(["/c", "start", "Sign in", "cmd", "/k", command]).spawn()
+        // The terminal inherits what is set here, so the tool signs in to the right folder.
+        Command::new("cmd")
+            .args(["/c", "start", "Sign in", "cmd", "/k", command])
+            .envs(env.iter().map(|(k, v)| (k, v)))
+            .spawn()
     } else if cfg!(target_os = "macos") {
         Command::new("osascript")
             .args(["-e", &format!("tell application \"Terminal\" to do script \"{command}\"")])
             .spawn()
     } else {
-        Command::new("x-terminal-emulator").args(["-e", command]).spawn()
+        Command::new("x-terminal-emulator")
+            .args(["-e", command])
+            .envs(env.iter().map(|(k, v)| (k, v)))
+            .spawn()
     };
     result
         .map(|_| ())
@@ -343,6 +413,9 @@ pub fn print() {
         println!("  How this was checked: {}", s.how);
         for step in &s.fix {
             println!("  - {step}");
+        }
+        for l in &s.logins {
+            println!("  Sign-in \"{}\": {}", l.login.name, l.text);
         }
     }
 }

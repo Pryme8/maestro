@@ -27,6 +27,7 @@ mod control;
 mod environment;
 mod history;
 mod live;
+mod logins;
 mod netmap;
 mod paths;
 mod receiver;
@@ -59,6 +60,10 @@ fn main() -> eframe::Result<()> {
     }
     // The managed environment: `--env...` and `--work...`.
     if let Some(code) = environment::cli(&args) {
+        std::process::exit(code);
+    }
+    // Named sign-ins kept apart: `--logins`, `--login-add`, `--login-forget`.
+    if let Some(code) = logins::cli(&args) {
         std::process::exit(code);
     }
     // `--services` says which agent tools can be used and what to do about the rest.
