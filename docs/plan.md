@@ -19,8 +19,9 @@ This is the foundation, built in phases 1 and 2.
 - **Undo:** every stop is reversible. Ending a task restores what was running before it.
 - **Protected processes:** processes the operating system needs are never stopped, and you can pin anything else you want kept.
 - **Controls:** process, network and adapter actions from one interface, replacing the resource manager. Built so far: pause, resume and end a program; block a program at the firewall; switch an adapter off; and an action log with undo.
-- **Clearing the machine:** built as a preview. You pick the task, the app lists what could be paused, and nothing is paused until you confirm. The task's family is always left running: what started it and what it started. Saved, named profiles per task come next.
-- **Acting on a process does not reach what it started.** Pausing a launcher leaves the program it launched running. Actions today apply to every process with the same program name; acting on a whole family tree at once is the next control to add.
+- **Clearing the machine:** built as a preview. You pick the task, the app lists what could be paused, and nothing is paused until you confirm. The task's family is always left running: what started it and what it started.
+- **Profiles:** the set you ticked can be saved under a name and paused again with one click. A profile only names programs. What is safe to pause is worked out again each time it is used, so the task's family, the keep list and anything locked are left alone even if the profile lists them.
+- **Acting on a family:** Pause, Resume and End act on every process with the same program name, and with one tick also on everything those processes started. Locked processes inside the family are left alone.
 - **Never left frozen:** everything paused is written to disk first, resumed when the app closes, and offered for resuming at the next start after a crash.
 - **Many views of the same data:** no single picture suits every question, so the running programs can be drawn several ways. Built so far: tiles, a heat map sized by memory and coloured by load, a tree of what started what, and a map that joins programs to the programs they started. More views are welcome wherever they help a person understand and control what is going on.
 - **Critical or extra:** every process is sorted in plain words: critical to the system, part of the system, background service, or app. A process using a critical system name from outside the system folders is flagged. Each operating system has its own rules for this. Today this is judged from names, file locations and parentage. Signature checks come next, and this sorting is what task profiles will use to decide what is safe to stop.
@@ -40,6 +41,8 @@ If something on the PC is sending data to a server, you see the whole path in pl
 - **What it is doing:** how much it sends and receives, how often, to which domains, and over which protocol.
 - **How risky it is:** unsigned or tampered files, unusual locations on disk, unknown destinations and odd timing raise the risk shown. A file's fingerprint can be checked against public reputation services if you opt in.
 - **What you can do:** end the process, block the destination or the whole program at the firewall, disable what restarts it, and quarantine or remove the file. Each action is explained before it runs and can be undone.
+
+Built so far, on the Network page: every connection grouped by the program that opened it; whether the far end is this computer, your network or the internet; the name registered for the address, looked up in the background from the DNS server the system already uses, which can be switched off; an owner read from that name for the most common hosts; what the port is normally used for; and every listening port with whether other computers can reach it. Not built yet: how much each connection carries, the names the program itself asked for, signatures, location, firewall rules, and blocking a single destination.
 
 ### Hardware: control what the machine exposes
 

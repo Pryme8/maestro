@@ -75,6 +75,21 @@ pub struct Journal {
     pub budgets: HashMap<String, f64>,
     #[serde(default)]
     pub quests: Vec<Quest>,
+    /// Saved ways of clearing the machine, by name.
+    #[serde(default)]
+    pub profiles: Vec<Profile>,
+    /// True when the names behind network addresses are not to be looked up.
+    #[serde(default)]
+    pub no_lookups: bool,
+}
+
+/// A saved way of clearing the machine: the task it is for and the programs
+/// to pause for it.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Profile {
+    pub name: String,
+    pub task: String,
+    pub pause: Vec<String>,
 }
 
 /// A named piece of work, and what its agent reported spending on it.
@@ -201,6 +216,61 @@ pub fn focus_plan(
     plan.apps.sort_unstable();
     plan.services.sort_unstable();
     plan
+}
+
+/// The processes a saved profile would pause right now. The profile only
+/// names programs; what is safe is worked out afresh each time, so the task's
+/// family, the keep list and everything locked are left alone even if the
+/// profile lists them.
+pub fn profile_targets<'a>(
+    snap: &'a Snapshot,
+    classes: &HashMap<u32, Class>,
+    profile: &Profile,
+    keep: &[String],
+) -> Vec<&'a Proc> {
+    let plan = focus_plan(snap, classes, &profile.task, keep);
+    let allowed: HashSet<&str> = plan
+        .apps
+        .iter()
+        .chain(&plan.services)
+        .map(String::as_str)
+        .collect();
+    snap.processes
+        .iter()
+        .filter(|p| allowed.contains(p.name.as_str()) && profile.pause.contains(&p.name))
+        .collect()
+}
+
+/// Every process of a program together with everything it started, and
+/// everything those started. Processes Maestro will not act on are left out,
+/// and so is Maestro.
+pub fn with_started<'a>(
+    snap: &'a Snapshot,
+    classes: &HashMap<u32, Class>,
+    program: &str,
+) -> Vec<&'a Proc> {
+    let by_pid: HashMap<u32, &Proc> = snap.processes.iter().map(|p| (p.pid, p)).collect();
+    let mut children: HashMap<u32, Vec<&Proc>> = HashMap::new();
+    for p in &snap.processes {
+        if let Some(parent) = real_parent(p, &by_pid) {
+            children.entry(parent.pid).or_default().push(p);
+        }
+    }
+    let mut seen: HashSet<u32> = HashSet::new();
+    let mut family = Vec::new();
+    let mut next: Vec<&Proc> = snap.processes.iter().filter(|p| p.name == program).collect();
+    while let Some(p) = next.pop() {
+        if !seen.insert(p.pid) {
+            continue;
+        }
+        let class = classes.get(&p.pid).copied().unwrap_or(Class::App);
+        if check(class, p.pid).is_ok() {
+            family.push(p);
+        }
+        next.extend(children.get(&p.pid).into_iter().flatten().copied());
+    }
+    family.sort_by_key(|p| p.pid);
+    family
 }
 
 /// The process that started `p`, ignoring reused process numbers.
@@ -720,6 +790,64 @@ mod tests {
         assert_eq!(plan.services, ["sync.exe"]);
         // Windows components are never offered.
         assert!(!plan.apps.iter().chain(&plan.services).any(|n| n == "winthing.exe"));
+    }
+
+    #[test]
+    fn a_profile_never_pauses_the_task_family_or_anything_locked() {
+        let snap = snapshot(vec![
+            proc(100, 1, "shell.exe", 10),
+            proc(200, 100, "task.exe", 20),
+            proc(300, 200, "helper.exe", 30),
+            proc(400, 1, "music.exe", 40),
+            proc(401, 1, "music.exe", 41),
+            proc(500, 1, "chat.exe", 50),
+            proc(700, 1, "winthing.exe", 70),
+        ]);
+        let classes: HashMap<u32, Class> = [
+            (100, Class::App),
+            (200, Class::App),
+            (300, Class::App),
+            (400, Class::App),
+            (401, Class::App),
+            (500, Class::App),
+            (700, Class::System),
+        ]
+        .into();
+        let profile = Profile {
+            name: "build".to_string(),
+            task: "task.exe".to_string(),
+            // Lists programs that must be refused, and one that is not running.
+            pause: ["music.exe", "chat.exe", "helper.exe", "winthing.exe", "gone.exe"]
+                .map(String::from)
+                .to_vec(),
+        };
+        let pids = |keep: &[String]| -> Vec<u32> {
+            profile_targets(&snap, &classes, &profile, keep).iter().map(|p| p.pid).collect()
+        };
+        assert_eq!(pids(&[]), [400, 401, 500]);
+        assert_eq!(pids(&["chat.exe".to_string()]), [400, 401]);
+    }
+
+    #[test]
+    fn a_family_is_the_program_and_all_it_started_except_what_is_locked() {
+        let snap = snapshot(vec![
+            proc(100, 1, "shell.exe", 10),
+            proc(200, 100, "task.exe", 20),
+            proc(300, 200, "helper.exe", 30),
+            proc(310, 300, "grandchild.exe", 31),
+            proc(320, 200, "winthing.exe", 32),
+            proc(330, 320, "under-locked.exe", 33),
+            proc(201, 1, "task.exe", 21),
+            proc(400, 1, "music.exe", 40),
+            // Has task.exe's number as its parent but started before it.
+            proc(500, 200, "older.exe", 5),
+        ]);
+        let mut classes: HashMap<u32, Class> =
+            snap.processes.iter().map(|p| (p.pid, Class::App)).collect();
+        classes.insert(320, Class::System);
+        let pids: Vec<u32> = with_started(&snap, &classes, "task.exe").iter().map(|p| p.pid).collect();
+        assert_eq!(pids, [200, 201, 300, 310, 330]);
+        assert!(with_started(&snap, &classes, "nothing.exe").is_empty());
     }
 
     #[test]

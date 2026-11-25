@@ -4,6 +4,7 @@
 
 mod controls;
 mod crew;
+mod network;
 mod router;
 mod timeline;
 mod views;
@@ -90,6 +91,9 @@ pub struct App {
     tl: timeline::Timeline,
     /// Phase 5: the ledger of accounts and the advisor.
     router: router::RouterUi,
+    /// The names behind network addresses, looked up in the background.
+    names: crate::netmap::Names,
+    net: network::NetUi,
     shot: Option<Shot>,
 }
 
@@ -153,6 +157,11 @@ impl App {
             }
         });
 
+        let ctl = controls::State::load();
+        let wake = cc.egui_ctx.clone();
+        let mut names = crate::netmap::Names::start(move || wake.request_repaint());
+        names.on = !ctl.journal.no_lookups;
+
         Self {
             rx,
             snap: None,
@@ -164,13 +173,15 @@ impl App {
             class_filter: None,
             mold: HashMap::new(),
             filter: String::new(),
-            ctl: controls::State::load(),
+            ctl,
             crew: crew::Crew::start(&cc.egui_ctx),
             history,
             live,
             page,
             tl: timeline::Timeline::new(),
             router: router::RouterUi::load(),
+            names,
+            net: network::NetUi::new(),
             shot: screenshot.map(|path| Shot {
                 path,
                 requested: false,
@@ -254,7 +265,11 @@ impl eframe::App for App {
                         .resizable(true)
                         .default_width(420.0)
                         .show(ctx, |ui| {
-                            detail(ui, &snap, group, &mut open, |ui| self.actions_ui(ui, group))
+                            let names = &self.names;
+                            let ctl = &mut self.ctl;
+                            detail(ui, &snap, group, names, &mut open, |ui| {
+                                ctl.actions_ui(ui, &snap, &classes, group)
+                            })
                         });
                     if !open {
                         self.selected = None;
@@ -275,10 +290,12 @@ impl eframe::App for App {
                         }
                         ui.add_space(4.0);
                         self.crew_ui(ui, &found);
+                        self.profiles_ui(ui, &snap, &classes);
                         ui.add_space(14.0);
                         self.crew(ui, &snap, &groups);
                     }
                     Page::Timeline => self.timeline_ui(ui),
+                    Page::Network => self.network_ui(ui, &snap),
                     Page::Router => self.router_ui(ui),
                 });
         });
@@ -316,6 +333,8 @@ fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize, page: &mut Page) {
                 ui.selectable_value(page, Page::Base, "Base");
                 ui.selectable_value(page, Page::Timeline, "Timeline")
                     .on_hover_text("The last day, what happened, what agents spent, and achievements.");
+                ui.selectable_value(page, Page::Network, "Network")
+                    .on_hover_text("Who each program is connected to, and which ports are open.");
                 ui.selectable_value(page, Page::Router, "Router")
                     .on_hover_text("Your AI accounts, and the cheapest way to do a task with them.");
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -427,7 +446,7 @@ fn rooms(ui: &mut Ui, snap: &Snapshot) -> Option<String> {
             let remote = snap
                 .connections
                 .iter()
-                .filter(|c| c.state.as_deref() == Some("ESTABLISHED"))
+                .filter(|c| c.state.as_deref().is_some_and(|s| s.eq_ignore_ascii_case("established")))
                 .count();
             ui.label(
                 RichText::new(format!(
@@ -613,6 +632,7 @@ fn detail(
     ui: &mut Ui,
     snap: &Snapshot,
     group: &Group<'_>,
+    hosts: &crate::netmap::Names,
     open: &mut bool,
     actions: impl FnOnce(&mut Ui),
 ) {
@@ -712,7 +732,7 @@ fn detail(
                 .filter(|c| c.pid.is_some_and(|pid| pids.contains(&pid)))
                 .collect();
             // Connections to somewhere first, then sockets that are only listening.
-            conns.sort_by_key(|c| c.state.as_deref() != Some("ESTABLISHED"));
+            conns.sort_by_key(|c| !c.state.as_deref().is_some_and(|s| s.eq_ignore_ascii_case("established")));
             if conns.is_empty() {
                 ui.label(RichText::new("No open sockets.").color(DIM).size(11.0));
             }
@@ -737,6 +757,13 @@ fn detail(
                                 .color(DIM)
                                 .size(11.0),
                         );
+                        // The name behind the far end, once it has been looked up.
+                        let name = c
+                            .remote_addr
+                            .as_deref()
+                            .filter(|_| c.remote_port.is_some_and(|port| port != 0))
+                            .and_then(|addr| hosts.get(addr));
+                        ui.label(RichText::new(clip(name.as_deref().unwrap_or(""), 34)).size(11.0));
                         ui.end_row();
                     }
                 });

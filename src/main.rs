@@ -26,6 +26,7 @@ mod classify;
 mod control;
 mod environment;
 mod history;
+mod netmap;
 mod paths;
 mod receiver;
 mod router;
@@ -113,6 +114,14 @@ fn main() -> eframe::Result<()> {
         return Ok(());
     }
 
+    // `--connections` lists who each program is connected to and what is
+    // listening. `--no-names` skips looking up the names behind addresses.
+    if args.iter().any(|a| a == "--connections") {
+        let snap = telemetry::Sampler::new().sample();
+        netmap::print(&snap, !args.iter().any(|a| a == "--no-names"));
+        return Ok(());
+    }
+
     // `--dump` prints one telemetry sample as JSON and exits, without a window.
     if args.iter().any(|a| a == "--dump") {
         let mut sampler = telemetry::Sampler::new();
@@ -154,7 +163,7 @@ fn main() -> eframe::Result<()> {
         .and_then(|name| ui::View::parse(name))
         .unwrap_or(ui::View::Tiles);
 
-    // `--page base|timeline|router` picks the page the window opens on.
+    // `--page base|timeline|network|router` picks the page the window opens on.
     let page = arg_after(&args, "--page")
         .and_then(ui::Page::parse)
         .unwrap_or(ui::Page::Base);

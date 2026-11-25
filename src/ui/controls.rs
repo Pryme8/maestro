@@ -61,6 +61,19 @@ struct Focus {
     task: String,
     kept: Vec<String>,
     picks: Option<Vec<Pick>>,
+    /// A name to save the chosen programs under. Empty saves nothing.
+    save_as: String,
+}
+
+impl Focus {
+    fn new(task: String) -> Self {
+        Self {
+            task,
+            kept: Vec::new(),
+            picks: None,
+            save_as: String::new(),
+        }
+    }
 }
 
 pub(super) struct State {
@@ -68,6 +81,10 @@ pub(super) struct State {
     log: Vec<Entry>,
     /// Program waiting for a second click before it is ended.
     confirm_end: Option<String>,
+    /// Act on a program together with everything it started.
+    with_started: bool,
+    /// Saved profile waiting for a second click before it is forgotten.
+    confirm_forget: Option<String>,
     focus: Option<Focus>,
     /// Adapter whose window is open, and whether "switch off" was clicked once.
     adapter: Option<String>,
@@ -88,6 +105,8 @@ impl State {
             journal,
             log: Vec::new(),
             confirm_end: None,
+            with_started: false,
+            confirm_forget: None,
             focus: None,
             adapter: None,
             adapter_confirm: false,
@@ -327,11 +346,7 @@ impl Drop for State {
 
 impl App {
     pub(super) fn open_focus(&mut self, task: String) {
-        self.ctl.focus = Some(Focus {
-            task,
-            kept: Vec::new(),
-            picks: None,
-        });
+        self.ctl.focus = Some(Focus::new(task));
     }
 
     pub(super) fn open_adapter(&mut self, name: String) {
@@ -339,8 +354,76 @@ impl App {
         self.ctl.adapter_confirm = false;
     }
 
+    /// Saved ways of clearing the machine, each applied with one click.
+    pub(super) fn profiles_ui(&mut self, ui: &mut Ui, snap: &Snapshot, classes: &HashMap<u32, Class>) {
+        let ctl = &mut self.ctl;
+        if ctl.journal.profiles.is_empty() {
+            return;
+        }
+        ui.add_space(14.0);
+        section_title(ui, "PROFILES", "saved ways of clearing the machine");
+        let mut apply = None;
+        let mut forget = None;
+        ui.horizontal_wrapped(|ui| {
+            for profile in &ctl.journal.profiles {
+                let targets = control::profile_targets(snap, classes, profile, &ctl.journal.keep);
+                let mut running: Vec<&str> = targets.iter().map(|p| p.name.as_str()).collect();
+                running.sort_unstable();
+                running.dedup();
+                let hint = format!(
+                    "For {}. Pauses {} of its {} programs now: {}.",
+                    profile.task,
+                    running.len(),
+                    profile.pause.len(),
+                    running.join(", ")
+                );
+                if ui
+                    .add_enabled(!targets.is_empty(), egui::Button::new(&profile.name))
+                    .on_hover_text(hint)
+                    .on_disabled_hover_text("Nothing in this profile is running and free to pause.")
+                    .clicked()
+                {
+                    let list: Vec<Paused> = targets.iter().map(|p| Paused::of(p)).collect();
+                    apply = Some((profile.name.clone(), list));
+                }
+                if ctl.confirm_forget.as_deref() == Some(profile.name.as_str()) {
+                    if ui.small_button(RichText::new("Confirm: forget").color(RED)).clicked() {
+                        forget = Some(profile.name.clone());
+                    }
+                } else if ui
+                    .small_button("forget")
+                    .on_hover_text("Remove this saved profile. Nothing running is touched.")
+                    .clicked()
+                {
+                    ctl.confirm_forget = Some(profile.name.clone());
+                }
+                ui.add_space(10.0);
+            }
+        });
+        if let Some((name, list)) = apply {
+            ctl.happened.push(Happened::Cleared);
+            ctl.pause(&format!("programs in the profile {name}"), list);
+        }
+        if let Some(name) = forget {
+            ctl.confirm_forget = None;
+            ctl.journal.profiles.retain(|p| p.name != name);
+            ctl.journal.save();
+            ctl.note(format!("Forgot the profile {name}"), true, None);
+        }
+    }
+}
+
+impl State {
+
+
     /// The action buttons for the selected program, in the detail panel.
-    pub(super) fn actions_ui(&mut self, ui: &mut Ui, group: &Group<'_>) {
+    pub(super) fn actions_ui(
+        &mut self,
+        ui: &mut Ui,
+        snap: &Snapshot,
+        classes: &HashMap<u32, Class>,
+        group: &Group<'_>,
+    ) {
         ui.add_space(8.0);
         ui.label(RichText::new("ACTIONS").color(TEAL).size(11.0));
 
@@ -353,23 +436,35 @@ impl App {
             return;
         }
 
-        let ctl = &mut self.ctl;
+        let ctl = self;
         let ctx = ui.ctx().clone();
         let name = group.name.to_string();
-        let procs: Vec<Paused> = group.procs.iter().map(|p| Paused::of(p)).collect();
+        // The program alone, or with everything it started.
+        let family = control::with_started(snap, classes, group.name);
+        let extra = family.len().saturating_sub(group.procs.len());
+        let procs: Vec<Paused> = if ctl.with_started {
+            family.iter().map(|p| Paused::of(p)).collect()
+        } else {
+            group.procs.iter().map(|p| Paused::of(p)).collect()
+        };
+        let label = if ctl.with_started && extra > 0 {
+            format!("{name} and what it started")
+        } else {
+            name.clone()
+        };
 
         let mut open_focus = false;
         ui.horizontal_wrapped(|ui| {
-            if group.paused {
+            if group.paused || procs.iter().any(|p| ctl.journal.paused.contains(p)) {
                 if ui.button("Resume").clicked() {
-                    ctl.resume(&name, procs.clone());
+                    ctl.resume(&label, procs.clone());
                 }
             } else if ui
                 .button("Pause")
                 .on_hover_text("Freezes the program so it uses no processor. Nothing is lost.")
                 .clicked()
             {
-                ctl.pause(&name, procs.clone());
+                ctl.pause(&label, procs.clone());
             }
 
             if ctl.confirm_end.as_deref() == Some(group.name) {
@@ -377,7 +472,7 @@ impl App {
                     .color(RED);
                 if ui.button(confirm).clicked() {
                     ctl.confirm_end = None;
-                    ctl.end(&name, procs.clone());
+                    ctl.end(&label, procs.clone());
                 }
                 if ui.button("Cancel").clicked() {
                     ctl.confirm_end = None;
@@ -420,11 +515,18 @@ impl App {
         });
 
         if open_focus {
-            ctl.focus = Some(Focus {
-                task: name.clone(),
-                kept: Vec::new(),
-                picks: None,
-            });
+            ctl.focus = Some(Focus::new(name.clone()));
+        }
+
+        if extra > 0 {
+            ui.checkbox(
+                &mut ctl.with_started,
+                format!("Pause, Resume and End also act on the {extra} processes it started"),
+            )
+            .on_hover_text(
+                "Everything this program started, and everything those started. Anything \
+                 locked is left alone.",
+            );
         }
 
         let mut keep = ctl.journal.keep.contains(&name);
@@ -441,6 +543,9 @@ impl App {
         }
     }
 
+}
+
+impl App {
     /// The bar along the bottom: what Maestro has changed, and the way back.
     pub(super) fn action_log(&mut self, ctx: &egui::Context) {
         let ctl = &mut self.ctl;
@@ -631,6 +736,18 @@ impl App {
                     .size(11.0),
                 );
                 ui.horizontal(|ui| {
+                    ui.label(RichText::new("Save as a profile").color(DIM).size(11.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut focus.save_as)
+                            .hint_text("a name, or leave empty")
+                            .desired_width(180.0),
+                    )
+                    .on_hover_text(
+                        "Saves the ticked programs under this name, so the same set can be \
+                         paused later with one click from the Base page.",
+                    );
+                });
+                ui.horizontal(|ui| {
                     apply = ui
                         .add_enabled(!chosen.is_empty(), egui::Button::new("Pause chosen"))
                         .clicked();
@@ -646,6 +763,17 @@ impl App {
                 .flat_map(|g| g.procs.iter().map(|p| Paused::of(p)))
                 .collect();
             let label = format!("programs to clear the machine for {}", focus.task);
+            let saved = focus.save_as.trim().to_string();
+            if !saved.is_empty() {
+                let profile = control::Profile {
+                    name: saved.clone(),
+                    task: focus.task.clone(),
+                    pause: picks.iter().filter(|p| p.on).map(|p| p.name.clone()).collect(),
+                };
+                // Saving under a name already in use replaces that profile.
+                ctl.journal.profiles.retain(|p| p.name != saved);
+                ctl.journal.profiles.push(profile);
+            }
             ctl.focus = None;
             ctl.happened.push(Happened::Cleared);
             ctl.pause(&label, list);
