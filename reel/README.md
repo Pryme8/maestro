@@ -1,6 +1,8 @@
 # Maestro sizzle reel: script, shot list and edit plan
 
-A draft for review. Nothing has been captured or rendered yet. 75 seconds, 1920x1080, 30 frames a second, for YouTube.
+75 seconds, 1920x1080, 30 frames a second, for YouTube.
+
+`python reel/build.py` renders it from the footage in `reel/footage/`, which git ignores. A shot with no footage gets a stand-in card, and the file is then named `maestro-reel-rough.mp4`. So far only the rough cut has been rendered: no footage has been captured.
 
 Every shot is the real program. Title cards are plain text on the site's dark background. There is no voice: the words below are on-screen captions, so the reel works with the sound off. They can also be read as a voice-over if you want to record one.
 
