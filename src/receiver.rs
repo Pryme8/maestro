@@ -16,6 +16,8 @@ pub const PORT: u16 = 4318;
 const MAX_BODY: u64 = 8 * 1024 * 1024;
 const FILE: &str = "usage.json";
 const DAYS_KEPT: usize = 400;
+/// Eight days of hours, enough for a weekly allowance window.
+const HOURS_KEPT: usize = 8 * 24;
 
 #[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, PartialEq)]
 pub struct Totals {
@@ -51,6 +53,13 @@ pub struct Store {
     /// Finished days, by days since 1970 in UTC. The last `DAYS_KEPT` are kept.
     #[serde(default)]
     pub days: BTreeMap<u64, HashMap<String, Totals>>,
+    /// The last `HOURS_KEPT` hours, by hours since 1970. Allowances are
+    /// counted over rolling windows of hours.
+    #[serde(default)]
+    pub hours: BTreeMap<u64, HashMap<String, Totals>>,
+    /// The hour new figures are filed under.
+    #[serde(skip)]
+    now_hour: u64,
     /// Last value of each cumulative series, to turn it into increases.
     #[serde(skip)]
     last_seen: HashMap<String, f64>,
@@ -119,6 +128,7 @@ impl Store {
     /// Returns how many figures were used.
     pub fn ingest(&mut self, body: &Value) -> usize {
         self.roll_day();
+        self.now_hour = now_ms() / 3_600_000;
         let used = self.apply(body);
         if used > 0 {
             self.last_report_ms = now_ms();
@@ -158,6 +168,11 @@ impl Store {
                         for totals in [
                             self.today.entry(agent.clone()).or_default(),
                             self.lifetime.entry(agent.clone()).or_default(),
+                            self.hours
+                                .entry(self.now_hour)
+                                .or_default()
+                                .entry(agent.clone())
+                                .or_default(),
                         ] {
                             field.add(totals, &kind, increase);
                         }
@@ -166,7 +181,33 @@ impl Store {
                 }
             }
         }
+        while self.hours.len() > HOURS_KEPT {
+            self.hours.pop_first();
+        }
         used
+    }
+
+    /// What each agent reported over the last `span` hours, counting the
+    /// hour `now_hour` as the last one.
+    pub fn over_hours(&self, span: u64, now_hour: u64) -> HashMap<String, Totals> {
+        let from = (now_hour + 1).saturating_sub(span);
+        let mut sum: HashMap<String, Totals> = HashMap::new();
+        for hour in self.hours.range(from..=now_hour).map(|(_, hour)| hour) {
+            for (agent, totals) in hour {
+                sum.entry(agent.clone()).or_default().add(totals);
+            }
+        }
+        sum
+    }
+
+    /// What each agent reported over a rolling window ending now. Windows
+    /// of up to a week are counted by the hour, longer ones by the day.
+    pub fn window(&self, hours: u32) -> HashMap<String, Totals> {
+        if hours as usize <= HOURS_KEPT - 24 {
+            self.over_hours(hours as u64, now_ms() / 3_600_000)
+        } else {
+            self.over((hours as u64).div_ceil(24))
+        }
     }
 }
 
@@ -381,6 +422,26 @@ mod tests {
         assert_eq!(totals.cost_usd, 1.5);
         assert_eq!(totals.tokens_in, 1800.0);
         assert_eq!(totals.tokens_out, 100.0);
+    }
+
+    #[test]
+    fn usage_is_filed_by_the_hour_for_rolling_windows() {
+        let mut store = store();
+        for (hour, cost) in [(1000, 1.0), (1003, 2.0), (1005, 4.0)] {
+            store.now_hour = hour;
+            store.apply(&message(1, cost, "100", "0"));
+        }
+        // A five-hour window ending in hour 1005 covers hours 1001 to 1005.
+        assert_eq!(store.over_hours(5, 1005)["claude-code"].cost_usd, 6.0);
+        assert_eq!(store.over_hours(6, 1005)["claude-code"].cost_usd, 7.0);
+        assert_eq!(store.over_hours(1, 1005)["claude-code"].cost_usd, 4.0);
+        assert!(store.over_hours(2, 1010).is_empty());
+        // Old hours are dropped once more than eight days are held.
+        for hour in 2000..2000 + HOURS_KEPT as u64 + 10 {
+            store.now_hour = hour;
+            store.apply(&message(1, 1.0, "1", "0"));
+        }
+        assert_eq!(store.hours.len(), HOURS_KEPT);
     }
 
     #[test]

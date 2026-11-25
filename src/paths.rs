@@ -5,6 +5,10 @@ use std::path::PathBuf;
 /// The folder for Maestro's saved state. Created on first save.
 pub fn data_dir() -> PathBuf {
     let var = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from);
+    // For trying things out without touching the real files.
+    if let Some(dir) = var("MAESTRO_DATA_DIR") {
+        return dir;
+    }
     if cfg!(windows) {
         if let Some(base) = var("LOCALAPPDATA") {
             return base.join("Maestro");

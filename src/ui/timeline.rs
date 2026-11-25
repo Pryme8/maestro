@@ -12,6 +12,7 @@ use std::collections::HashSet;
 pub enum Page {
     Base,
     Timeline,
+    Router,
 }
 
 impl Page {
@@ -19,6 +20,7 @@ impl Page {
         match name {
             "base" => Some(Page::Base),
             "timeline" => Some(Page::Timeline),
+            "router" => Some(Page::Router),
             _ => None,
         }
     }

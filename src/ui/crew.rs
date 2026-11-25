@@ -50,6 +50,14 @@ pub(super) struct Ledger {
 }
 
 impl Crew {
+    /// What each account's agent reported over that account's window.
+    pub(super) fn used(&self, ledger: &crate::router::Ledger) -> Vec<Totals> {
+        match self.store.lock() {
+            Ok(store) => crate::router::used(ledger, &store),
+            Err(_) => Vec::new(),
+        }
+    }
+
     pub(super) fn ledger(&self) -> Ledger {
         match self.store.lock() {
             Ok(mut store) => {

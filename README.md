@@ -2,7 +2,7 @@
 
 Maestro is a planned replacement for the resource manager and the everyday operating-system interfaces, built for a machine whose main job is running AI agents. It shows everything running on your PC, shuts down whatever the current task does not need, and gives you one visual, manageable place to direct the agents doing the work.
 
-**Status: phases 1 to 4 are running in a first form.** The app is a native program, built on Windows first and now also on Linux, that reads the machine, draws it, and can act on it: pause, resume and end programs, clear the machine for a task, block a program on the network and switch an adapter off, each with a way back. This repo is public from day one so the design, the doubts and the decisions are all in the open.
+**Status: phases 1 to 4 are running in a first form, and phase 5 has its first part: the ledger and the advisor. The relay only prints its plan, and the managed environment is not built.** The app is a native program, built on Windows first and now also on Linux, that reads the machine, draws it, and can act on it: pause, resume and end programs, clear the machine for a task, block a program on the network and switch an adapter off, each with a way back. This repo is public from day one so the design, the doubts and the decisions are all in the open.
 
 ## The vision
 
@@ -53,9 +53,16 @@ The full plan, including what each hard part takes, is in [docs/plan.md](docs/pl
   - **Log book.** Thirteen achievements, such as keeping the processor calm for an hour or finishing ten quests, each with its progress.
   - All of this is kept in a file on this computer and sent nowhere.
 
-Not there yet: graphics load, hostnames and locations for connections, signature checks, saved task profiles, hardware controls, and stopping an agent automatically when its budget runs out. See the plan for the order.
+- **A ledger and an advisor**, on the Router page and from the command line:
+  - **Ledger.** You list your AI accounts: which tool, which model, how you rate the model (light, standard or heavy), and either its price per million tokens or your estimate of its subscription allowance over a rolling window.
+  - **Advisor.** Give it a task's size in tokens and the rating it needs, and it proposes up to three routes: the cheapest single tool that fits, a single tool that leaves every allowance untouched, and a draft on a cheaper model followed by a review on a stronger one. Each shows what it adds to your bill and what is left of each allowance.
+  - **Handoffs are costed.** A split counts the tokens for the handoff brief and for the second tool reading the work again. It is only proposed when it still saves money or you asked for a review, and small tasks are told to stay in one tool.
+  - **Relay plan, as a dry run.** For any route it prints the command each step would run and the handoff brief the tools would pass. It starts nothing. A command is shown only where the vendor's own documents support it: see [docs/research/relay.md](docs/research/relay.md).
+  - **Limits.** Maestro knows no vendor's prices or limits; every figure is yours. Usage is counted per tool, not per account or model, so two accounts on the same tool share one figure, and use from other devices is not seen. The advisor cannot judge answer quality.
 
-What has been tested: pause, resume, end, the locks and resume-on-close were run against a throwaway process, and the planning and script-building logic has unit tests. The network block and adapter switch need Windows' permission prompt and have not been run yet. The buttons have been seen on screen but not clicked through by a person. The agent recogniser was run on a machine with Claude Code, the Claude app, Copilot and Ollama; the other agents' rules are untested. The usage receiver was tested with a sample report, not yet with a real agent. The timeline, events and log book were seen on screen with a few minutes of real data; the ledger has only been seen empty, and its sums are covered by a unit test.
+Not there yet: running a relay, the managed environment (the WSL image, recorded paths and snapshots), graphics load, hostnames and locations for connections, signature checks, saved task profiles, hardware controls, and stopping an agent automatically when its budget runs out. See the plan for the order.
+
+What has been tested: pause, resume, end, the locks and resume-on-close were run against a throwaway process, and the planning and script-building logic has unit tests. The network block and adapter switch need Windows' permission prompt and have not been run yet. The buttons have been seen on screen but not clicked through by a person. The agent recogniser was run on a machine with Claude Code, the Claude app, Copilot and Ollama; the other agents' rules are untested. The usage receiver was tested with a sample report, not yet with a real agent. The timeline, events and log book were seen on screen with a few minutes of real data; the ledger has only been seen empty, and its sums are covered by a unit test. The advisor and ledger are covered by unit tests and were run from the command line on Windows and Linux against a scratch folder; the Router page compiles but has not been seen on screen. The commands in the relay plan come from reading each vendor's documents and have not been run.
 
 One known problem, there before phase 4 and not yet fixed: when every processor core is busy, one sample can take two or three seconds instead of about 16 ms. Giving the sampling thread a higher priority is the likely fix and has not been tried.
 
@@ -70,7 +77,11 @@ cargo run --release
 Other ways to start it:
 
 - `cargo run -- --view heat` opens on a chosen view: `tiles`, `heat`, `tree` or `mold`.
-- `cargo run -- --page timeline` opens on the Timeline page.
+- `cargo run -- --page timeline` opens on the Timeline page, and `--page router` on the Router page.
+- `cargo run -- --ledger` lists your AI accounts with what is left of each allowance.
+- `cargo run -- --account-add work claude-code opus heavy allowance 2000000 168` adds a subscription account with an estimated two million tokens a week. `... payperuse 3 15` adds one billed at $3 in and $15 out per million tokens. `--account-remove work` removes it. These example figures are made up.
+- `cargo run -- --advise 300000 --tier heavy --review` proposes routes for a task of 300,000 tokens. Add `--relay-plan` to print what a relay would run. Nothing is started.
+- Set `MAESTRO_DATA_DIR` to a folder to try any of this without touching your real files.
 - `cargo run -- --dump` prints one sample of the machine as JSON and exits, without opening a window.
 - `cargo run -- --screenshot shot.png` opens the window, saves one picture of it and exits.
 - `cargo run --release -- --profile` times each part of a sample, to show what the monitor itself costs.

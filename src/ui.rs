@@ -4,6 +4,7 @@
 
 mod controls;
 mod crew;
+mod router;
 mod timeline;
 mod views;
 
@@ -87,6 +88,8 @@ pub struct App {
     live: Arc<Live>,
     page: Page,
     tl: timeline::Timeline,
+    /// Phase 5: the ledger of accounts and the advisor.
+    router: router::RouterUi,
     shot: Option<Shot>,
 }
 
@@ -167,6 +170,7 @@ impl App {
             live,
             page,
             tl: timeline::Timeline::new(),
+            router: router::RouterUi::load(),
             shot: screenshot.map(|path| Shot {
                 path,
                 requested: false,
@@ -275,6 +279,7 @@ impl eframe::App for App {
                         self.crew(ui, &snap, &groups);
                     }
                     Page::Timeline => self.timeline_ui(ui),
+                    Page::Router => self.router_ui(ui),
                 });
         });
 
@@ -311,6 +316,8 @@ fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize, page: &mut Page) {
                 ui.selectable_value(page, Page::Base, "Base");
                 ui.selectable_value(page, Page::Timeline, "Timeline")
                     .on_hover_text("The last day, what happened, what agents spent, and achievements.");
+                ui.selectable_value(page, Page::Router, "Router")
+                    .on_hover_text("Your AI accounts, and the cheapest way to do a task with them.");
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let os = format!(
                         "{} {}",

@@ -27,6 +27,7 @@ mod control;
 mod history;
 mod paths;
 mod receiver;
+mod router;
 mod telemetry;
 mod ui;
 #[cfg(all(windows, target_pointer_width = "64"))]
@@ -46,6 +47,10 @@ fn main() -> eframe::Result<()> {
         if let Some(pid) = arg_after(&args, action).and_then(|v| v.parse::<u32>().ok()) {
             std::process::exit(command_line_action(action, pid));
         }
+    }
+    // The ledger and the advisor: `--ledger`, `--account-add`, `--account-remove`, `--advise`.
+    if let Some(code) = router::cli(&args) {
+        std::process::exit(code);
     }
     // `--agents` lists the AI agents found running. It changes nothing.
     if args.iter().any(|a| a == "--agents") {
@@ -144,7 +149,7 @@ fn main() -> eframe::Result<()> {
         .and_then(|name| ui::View::parse(name))
         .unwrap_or(ui::View::Tiles);
 
-    // `--page base|timeline` picks the page the window opens on.
+    // `--page base|timeline|router` picks the page the window opens on.
     let page = arg_after(&args, "--page")
         .and_then(ui::Page::parse)
         .unwrap_or(ui::Page::Base);

@@ -1,6 +1,6 @@
 # Maestro: plan
 
-As of 2026-11-24. Phases 1 to 4 are running in a first form. The router, phase 5, is not built.
+As of 2026-11-24. Phases 1 to 4 are running in a first form. Of phase 5, the ledger and advisor are built, the relay prints its plan without running it, and the managed environment is not built.
 
 ## Vision
 
@@ -84,7 +84,15 @@ Built in phase 4, in a first form.
 
 ## The router layer
 
-The router layer picks which AI account and model handles each step of a task, then hands the work between them. It sits on top of the agent layer and is planned as phase 5, after a standalone trial of the ledger and advisor.
+The router layer picks which AI account and model handles each step of a task, then hands the work between them. It sits on top of the agent layer and is phase 5.
+
+Built so far, in a first form:
+
+- **Ledger:** accounts you enter by hand, each with a tool, a model, your rating of the model, and either a price per million tokens or your estimate of an allowance over a rolling window of hours. The receiver now files usage by the hour, for eight days, so a rolling window can be counted.
+- **Advisor:** for a task's size and the rating it needs, up to three routes with their cost and their effect on each allowance. It prefers something that fits, then the cheapest, then the allowance with the most left, and keeps a reserve of each allowance out of its plans. A two-tool split counts the cost of the handoff and is dropped when it saves nothing.
+- **Relay plan:** a dry run. It prints what each step would run and the handoff brief. Commands are shown per tool and per kind of sign-in, from [research/relay.md](research/relay.md): Claude Code on either, and Codex, Cursor and Gemini CLI on an API key only, because their terms do not say whether another program may start them on a subscription login.
+
+Not built: running a relay, the managed environment, and context balancing. What they take is below.
 
 It can be exact about cost on API-billed accounts, can only estimate subscription quota, and cannot measure answer quality. "Optimal" therefore means the cheapest route that follows rules you set.
 
@@ -132,7 +140,7 @@ The router is phase 5, but a bare ledger and advisor are trialled first as a sta
 2. **Controls:** task profiles that stop what a task does not need, plus process, network and adapter actions, all with undo.
 3. **Agents:** recogniser, telemetry receiver, crew, quests and budgets.
 4. **Depth:** timeline, achievements, account totals, then Linux and macOS. Built, except that macOS has never been compiled and the Linux window has not been seen.
-5. **Router:** the advisor first, since it only needs the ledger, then the managed environment and the relay. It depends on phase 3 only, so it can move ahead of phases 1, 2 and 4 if the trial pays off.
+5. **Router:** the advisor first, since it only needs the ledger, then the managed environment and the relay. The ledger and advisor are built and the relay is a dry run; the managed environment comes next, because a relay must not run outside it. It depends on phase 3 only, so it can move ahead of phases 1, 2 and 4 if the trial pays off.
 
 Cursor and Claude adapters are built first. Each phase works on its own, so the build can stop after any of them.
 
