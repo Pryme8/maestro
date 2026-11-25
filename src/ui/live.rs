@@ -14,8 +14,10 @@ pub(super) struct LiveUi {
     runs: Vec<Attached>,
     folder: String,
     prompt: String,
-    edits: bool,
+    leave: Leave,
     say: String,
+    /// Why a step is being refused, sent back to the agent.
+    why: String,
     problem: Option<String>,
     /// Folders of the works in the managed environment, offered as places to run.
     works: Vec<(String, String)>,
@@ -31,6 +33,17 @@ pub(super) struct LiveUi {
 struct Attached {
     run: Run,
     paused: bool,
+}
+
+/// Something the user asked a run to do.
+enum Act {
+    Say(String),
+    Interrupt,
+    Pause,
+    Finish,
+    Stop,
+    Answer { request: String, tool: String, allow: bool },
+    Dismiss,
 }
 
 impl LiveUi {
@@ -49,8 +62,9 @@ impl LiveUi {
             runs: Vec::new(),
             folder: String::new(),
             prompt: String::new(),
-            edits: false,
+            leave: Leave::AskFirst,
             say: String::new(),
+            why: String::new(),
             problem: None,
             works,
             as_map: true,
@@ -96,6 +110,9 @@ fn step_row(ui: &mut Ui, now: u64, step: &Step) {
             Some(text),
         ),
         What::Finished { ok: false, text, .. } => ("error", RED, text.clone(), None),
+        What::NeedsYou { tool, detail } => ("asks", AMBER, format!("May it use {tool}?  {}", clip(detail, 150)), Some(detail)),
+        What::Decided { tool, allowed: true } => ("allowed", TEAL, format!("You allowed {tool}."), None),
+        What::Decided { tool, allowed: false } => ("refused", RED, format!("You refused {tool}."), None),
         What::Problem(text) => ("problem", RED, text.clone(), None),
         What::Ended => ("ended", DIM, "The process has exited.".to_string(), None),
     };
@@ -133,7 +150,7 @@ impl App {
                 "Sessions started anywhere are followed by reading the session files Claude Code \
                  keeps on this computer; they can be watched here, and paused or ended from the \
                  Base page. Sessions started here can also be told things, interrupted and \
-                 stopped. Steps are held in memory only. Other tools are not followed yet.",
+                 stopped, and they ask you before each step that needs permission. Steps are held in memory only. Other tools are not followed yet.",
             )
             .color(DIM)
             .size(11.0),
@@ -170,16 +187,16 @@ impl App {
                         .desired_rows(3)
                         .desired_width(620.0),
                 );
-                ui.checkbox(
-                    &mut lv.edits,
-                    "Let it create and change files in that folder without asking",
-                )
-                .on_hover_text(
-                    "Off: it can read and search, and anything needing approval is refused. \
-                     On: it may also edit files. Either way it cannot be approved step by step \
-                     from here yet. A work from the managed environment can be rolled back; an \
-                     ordinary folder cannot.",
-                );
+                ui.label(RichText::new("Before a step that needs permission, such as running a command or changing a file:").color(DIM).size(11.0));
+                ui.radio_value(&mut lv.leave, Leave::AskFirst, "Ask me each time")
+                    .on_hover_text("Each such step waits here until you allow or refuse it.");
+                ui.radio_value(&mut lv.leave, Leave::EditFiles, "Let it change files in that folder, and ask me about everything else")
+                    .on_hover_text(
+                        "File edits go ahead without asking. A work from the managed environment \
+                         can be rolled back; an ordinary folder cannot.",
+                    );
+                ui.radio_value(&mut lv.leave, Leave::ReadOnly, "Refuse them all: it may only read and search")
+                    .on_hover_text("Nothing is asked. Anything that would need permission is refused by the tool itself.");
                 ui.horizontal(|ui| {
                     let ready = blocked.is_none() && !lv.folder.trim().is_empty() && !lv.prompt.trim().is_empty();
                     if ui
@@ -190,7 +207,7 @@ impl App {
                         )
                         .clicked()
                     {
-                        let leave = if lv.edits { Leave::EditFiles } else { Leave::ReadOnly };
+                        let leave = lv.leave;
                         let wake = ui.ctx().clone();
                         let folder = std::path::PathBuf::from(lv.folder.trim());
                         match Run::start(lv.feed.clone(), &folder, lv.prompt.trim(), leave, move || {
@@ -242,7 +259,12 @@ impl App {
                 if session.ours {
                     text.insert_str(0, "▶ ");
                 }
-                let text = RichText::new(text).color(if active { TEAL } else { TEXT }).size(12.0);
+                let waiting = !session.asks.is_empty();
+                if waiting {
+                    text.insert_str(0, "needs you  ·  ");
+                }
+                let colour = if waiting { AMBER } else if active { TEAL } else { TEXT };
+                let text = RichText::new(text).color(colour).size(12.0);
                 let picked = lv.selected.as_deref() == Some(session.id.as_str());
                 if ui
                     .selectable_label(picked, text)
@@ -286,43 +308,107 @@ impl App {
             );
         }
 
+        // What the user asked for this frame. Carried out once the list of
+        // sessions is let go of, because acting on a run writes to that list.
+        let mut act: Option<Act> = None;
+        let attached = lv.runs.iter_mut().find(|a| a.run.id == session.id);
+
+        // Steps it is waiting to be allowed to take.
+        if attached.is_some() {
+            for ask in &session.asks {
+                ui.add_space(4.0);
+                egui::Frame::new()
+                    .fill(PANEL_HI)
+                    .stroke(Stroke::new(1.0, AMBER))
+                    .corner_radius(CornerRadius::same(5))
+                    .inner_margin(Margin::same(8))
+                    .show(ui, |ui| {
+                        ui.label(
+                            RichText::new(format!(
+                                "It is waiting for you: may it use {}?",
+                                live::short_tool(&ask.tool)
+                            ))
+                            .color(AMBER)
+                            .strong()
+                            .size(12.5),
+                        );
+                        if !ask.detail.is_empty() {
+                            let whole = serde_json::to_string_pretty(&ask.input).unwrap_or_default();
+                            ui.add(egui::Label::new(RichText::new(&ask.detail).monospace().size(11.5)).wrap())
+                                .on_hover_text(clip(&whole, 2000));
+                        }
+                        for (label, text) in [("It says", &ask.description), ("Why it asks", &ask.reason)] {
+                            if !text.is_empty() {
+                                ui.label(RichText::new(format!("{label}: {text}")).color(DIM).size(11.0));
+                            }
+                        }
+                        ui.horizontal_wrapped(|ui| {
+                            if ui
+                                .button("Allow this once")
+                                .on_hover_text("This one step goes ahead exactly as shown. The next one is asked again.")
+                                .clicked()
+                            {
+                                act = Some(Act::Answer {
+                                    request: ask.request_id.clone(),
+                                    tool: ask.tool.clone(),
+                                    allow: true,
+                                });
+                            }
+                            if ui
+                                .button(RichText::new("Refuse").color(RED))
+                                .on_hover_text("The step is not taken, and the agent is told why if you say.")
+                                .clicked()
+                            {
+                                act = Some(Act::Answer {
+                                    request: ask.request_id.clone(),
+                                    tool: ask.tool.clone(),
+                                    allow: false,
+                                });
+                            }
+                            ui.add(
+                                egui::TextEdit::singleline(&mut lv.why)
+                                    .hint_text("when refusing, say why so it can try another way")
+                                    .desired_width(330.0),
+                            );
+                            ui.label(RichText::new(ago(now, ask.at_ms)).color(DIM).size(10.0));
+                        });
+                    });
+            }
+        }
+
         // Controls, for a session started here.
-        let mut drop_run = false;
-        if let Some(at) = lv.runs.iter().position(|a| a.run.id == session.id) {
-            let attached = &mut lv.runs[at];
+        if let Some(attached) = attached {
             let running = attached.run.running();
+            let open = attached.run.open();
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
                 if !running {
                     ui.label(RichText::new("This session has ended.").color(DIM).size(11.0));
-                    drop_run = ui.small_button("Dismiss controls").clicked();
+                    if ui.small_button("Dismiss controls").clicked() {
+                        act = Some(Act::Dismiss);
+                    }
                     return;
                 }
-                let sent = ui.add_enabled(
-                    attached.run.open(),
+                let box_ = ui.add_enabled(
+                    open,
                     egui::TextEdit::singleline(&mut lv.say)
                         .hint_text("tell it something")
                         .desired_width(380.0),
                 );
-                let enter = sent.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                let enter = box_.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 let send = ui
-                    .add_enabled(attached.run.open() && !lv.say.trim().is_empty(), egui::Button::new("Send"))
+                    .add_enabled(open && !lv.say.trim().is_empty(), egui::Button::new("Send"))
                     .on_hover_text("It reads this when it next looks for a message, usually after its current step.")
                     .clicked();
                 if (send || enter) && !lv.say.trim().is_empty() {
-                    match attached.run.say(lv.say.trim()) {
-                        Ok(()) => lv.say.clear(),
-                        Err(problem) => lv.problem = Some(problem),
-                    }
+                    act = Some(Act::Say(lv.say.trim().to_string()));
                 }
                 if ui
-                    .add_enabled(attached.run.open(), egui::Button::new("Interrupt"))
+                    .add_enabled(open, egui::Button::new("Interrupt"))
                     .on_hover_text("Asks it to drop what it is doing and wait for your next message.")
                     .clicked()
                 {
-                    if let Err(problem) = attached.run.interrupt() {
-                        lv.problem = Some(problem);
-                    }
+                    act = Some(Act::Interrupt);
                 }
                 let label = if attached.paused { "Resume" } else { "Pause" };
                 if ui
@@ -330,30 +416,21 @@ impl App {
                     .on_hover_text("Freezes the agent's own process. Programs it started keep running.")
                     .clicked()
                 {
-                    let pid = attached.run.pid;
-                    let result = if attached.paused {
-                        crate::control::resume(pid)
-                    } else {
-                        crate::control::suspend(pid)
-                    };
-                    match result {
-                        Ok(()) => attached.paused = !attached.paused,
-                        Err(problem) => lv.problem = Some(problem),
-                    }
+                    act = Some(Act::Pause);
                 }
                 if ui
-                    .add_enabled(attached.run.open(), egui::Button::new("No more messages"))
+                    .add_enabled(open, egui::Button::new("No more messages"))
                     .on_hover_text("It finishes what it has been asked and then exits.")
                     .clicked()
                 {
-                    attached.run.finish();
+                    act = Some(Act::Finish);
                 }
                 if ui
                     .button(RichText::new("Stop now").color(RED))
                     .on_hover_text("Ends the agent's process at once.")
                     .clicked()
                 {
-                    attached.run.stop();
+                    act = Some(Act::Stop);
                 }
             });
         } else {
@@ -391,11 +468,56 @@ impl App {
                 }
             });
 
-        if sign_in_failed && lv.claude_block().is_none() {
+        // Carry out what was asked, now that the session list is free.
+        let session_id = session.id.clone();
+        let check_again = sign_in_failed;
+        drop(feed);
+        if check_again && lv.claude_block().is_none() {
             lv.check_services(ui.ctx());
         }
-        if drop_run {
-            lv.runs.retain(|a| a.run.id != session.id);
+        match act {
+            None => {}
+            Some(Act::Dismiss) => lv.runs.retain(|a| a.run.id != session_id),
+            Some(act) => {
+                if let Some(attached) = lv.runs.iter_mut().find(|a| a.run.id == session_id) {
+                    let result = match act {
+                        Act::Say(text) => attached.run.say(&text).map(|()| lv.say.clear()),
+                        Act::Interrupt => attached.run.interrupt(),
+                        Act::Pause => {
+                            let pid = attached.run.pid;
+                            let result = if attached.paused {
+                                crate::control::resume(pid)
+                            } else {
+                                crate::control::suspend(pid)
+                            };
+                            result.map(|()| attached.paused = !attached.paused)
+                        }
+                        Act::Finish => {
+                            attached.run.finish();
+                            Ok(())
+                        }
+                        Act::Stop => {
+                            attached.run.stop();
+                            Ok(())
+                        }
+                        Act::Answer { request, tool, allow } => {
+                            let result = attached.run.answer(&request, allow, &lv.why);
+                            if result.is_ok() {
+                                let verb = if allow { "Allowed" } else { "Refused" };
+                                self.ctl.note(
+                                    format!("{verb} a step by the agent: {}", live::short_tool(&tool)),
+                                    true,
+                                    None,
+                                );
+                                lv.why.clear();
+                            }
+                            result
+                        }
+                        Act::Dismiss => Ok(()),
+                    };
+                    lv.problem = result.err();
+                }
+            }
         }
         // The "ago" times move on even when nothing new arrives.
         ui.ctx().request_repaint_after(Duration::from_secs(1));

@@ -40,6 +40,10 @@ pub enum What {
     ToolDone { name: String, ok: bool, size: usize, preview: String },
     /// One request was answered in full.
     Finished { ok: bool, cost: Option<f64>, text: String },
+    /// The agent wants to take a step and is waiting to be told it may.
+    NeedsYou { tool: String, detail: String },
+    /// A person answered that question.
+    Decided { tool: String, allowed: bool },
     /// Something went wrong outside the conversation.
     Problem(String),
     /// The process ended.
@@ -230,6 +234,8 @@ pub struct Session {
     pub tool_counts: HashMap<String, u32>,
     /// Tool calls not yet answered, by call id.
     calls: HashMap<String, String>,
+    /// Steps waiting for a yes or a no, oldest first.
+    pub asks: Vec<Ask>,
 }
 
 impl Session {
@@ -243,6 +249,7 @@ impl Session {
             last_ms: 0,
             tool_counts: HashMap::new(),
             calls: HashMap::new(),
+            asks: Vec::new(),
         }
     }
 
@@ -305,6 +312,51 @@ impl Feed {
                 session.steps.pop_front();
             }
         }
+    }
+
+    fn session(&mut self, id: &str) -> &mut Session {
+        let index = match self.sessions.iter().position(|s| s.id == id) {
+            Some(index) => index,
+            None => {
+                self.sessions.push(Session::new(id, true));
+                self.sessions.len() - 1
+            }
+        };
+        &mut self.sessions[index]
+    }
+
+    /// A step is waiting for a yes or a no.
+    pub fn ask(&mut self, id: &str, ask: Ask) {
+        let session = self.session(id);
+        session.last_ms = session.last_ms.max(ask.at_ms);
+        session.steps.push_back(Step {
+            at_ms: ask.at_ms,
+            what: What::NeedsYou {
+                tool: ask.tool.clone(),
+                detail: ask.detail.clone(),
+            },
+        });
+        session.asks.push(ask);
+    }
+
+    /// Take a question off the list. `allowed` is the person's answer, or
+    /// `None` when the tool withdrew the question itself.
+    pub fn settle(&mut self, id: &str, request_id: &str, allowed: Option<bool>) -> Option<Ask> {
+        let session = self.sessions.iter_mut().find(|s| s.id == id)?;
+        let at = session.asks.iter().position(|a| a.request_id == request_id)?;
+        let ask = session.asks.remove(at);
+        if let Some(allowed) = allowed {
+            let now = now_ms();
+            session.last_ms = session.last_ms.max(now);
+            session.steps.push_back(Step {
+                at_ms: now,
+                what: What::Decided {
+                    tool: ask.tool.clone(),
+                    allowed,
+                },
+            });
+        }
+        Some(ask)
     }
 
     /// Forget sessions that have been quiet for a long time, except ones started here.
@@ -481,7 +533,10 @@ pub fn watch(feed: Arc<Mutex<Feed>>, wake: impl Fn() + Send + 'static) {
 pub enum Leave {
     /// Read and search. Anything that would need approval is refused.
     ReadOnly,
-    /// Also create and change files in its folder.
+    /// Every step that needs approval is put to the person directing it.
+    AskFirst,
+    /// Create and change files in its folder without asking; everything
+    /// else that needs approval is still asked.
     EditFiles,
 }
 
@@ -508,8 +563,17 @@ pub fn claude_args(leave: Leave) -> Vec<&'static str> {
         "stream-json",
         "--verbose",
     ];
-    if leave == Leave::EditFiles {
-        args.extend(["--permission-mode", "acceptEdits"]);
+    match leave {
+        // Nobody answers, so the tool refuses whatever it would have asked.
+        Leave::ReadOnly => args.extend(["--permission-prompts", "none"]),
+        // Questions come to whoever started it, over the same stream.
+        Leave::AskFirst => args.extend(["--permission-prompt-tool", "stdio"]),
+        Leave::EditFiles => args.extend([
+            "--permission-mode",
+            "acceptEdits",
+            "--permission-prompt-tool",
+            "stdio",
+        ]),
     }
     args
 }
@@ -577,6 +641,19 @@ impl Run {
             let (feed, id, wake) = (feed.clone(), id.clone(), wake.clone());
             std::thread::spawn(move || {
                 for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                    // A question about a step, or the tool taking one back.
+                    if let Some(control) = parse_control(&line, now_ms()) {
+                        if let Ok(mut feed) = feed.lock() {
+                            match control {
+                                Control::Ask(ask) => feed.ask(&id, ask),
+                                Control::Withdrawn(request) => {
+                                    feed.settle(&id, &request, None);
+                                }
+                            }
+                        }
+                        wake();
+                        continue;
+                    }
                     let Some(mut parsed) = parse_claude(&line, now_ms()) else { continue };
                     // What was asked is added when it is sent, so it is not taken from the echo.
                     parsed.steps.retain(|s| !matches!(s.what, What::Asked(_)));
@@ -649,6 +726,25 @@ impl Run {
         self.write(&line.to_string())
     }
 
+    /// Answer a question the agent asked before a step. `why` goes back to
+    /// the agent with a refusal, so it can try another way.
+    pub fn answer(&mut self, request_id: &str, allow: bool, why: &str) -> Result<(), String> {
+        let ask = self
+            .feed
+            .lock()
+            .ok()
+            .and_then(|feed| {
+                let session = feed.sessions.iter().find(|s| s.id == self.id)?;
+                session.asks.iter().find(|a| a.request_id == request_id).cloned()
+            })
+            .ok_or("That question is no longer waiting.")?;
+        self.write(&answer_line(&ask, allow, why))?;
+        if let Ok(mut feed) = self.feed.lock() {
+            feed.settle(&self.id, request_id, Some(allow));
+        }
+        Ok(())
+    }
+
     /// True while the run still takes messages.
     pub fn open(&self) -> bool {
         self.stdin.is_some()
@@ -675,6 +771,83 @@ impl Drop for Run {
     fn drop(&mut self) {
         self.stop();
     }
+}
+
+// ---- questions the agent asks before a step ---------------------------------
+
+/// A step the agent may not take until someone says yes or no.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ask {
+    /// The tool's own number for the question, sent back with the answer.
+    pub request_id: String,
+    pub tool: String,
+    /// The part of the call worth a line: the command, the file, the site.
+    pub detail: String,
+    /// The tool's own words for what it wants, when it gives any.
+    pub description: String,
+    /// Why it has to ask, when it says.
+    pub reason: String,
+    /// The whole call, handed back unchanged when it is allowed.
+    pub input: Value,
+    pub tool_use_id: Option<String>,
+    pub at_ms: u64,
+}
+
+/// What a line on the stream says about permission, if anything.
+#[derive(Debug, PartialEq)]
+pub enum Control {
+    Ask(Ask),
+    /// The tool no longer needs an answer to this question.
+    Withdrawn(String),
+}
+
+/// Read a permission question, or its withdrawal, from one line of the stream.
+pub fn parse_control(line: &str, now_ms: u64) -> Option<Control> {
+    let v: Value = serde_json::from_str(line).ok()?;
+    let text = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).unwrap_or("").to_string();
+    match v.get("type")?.as_str()? {
+        "control_request" => {
+            let request = v.get("request")?;
+            if request.get("subtype")?.as_str()? != "can_use_tool" {
+                return None;
+            }
+            let input = request.get("input").cloned().unwrap_or(Value::Null);
+            Some(Control::Ask(Ask {
+                request_id: text(&v, "request_id"),
+                tool: text(request, "tool_name"),
+                detail: detail(&input),
+                description: clip(&text(request, "description"), 600),
+                reason: clip(&text(request, "decision_reason"), 600),
+                input,
+                tool_use_id: request.get("tool_use_id").and_then(Value::as_str).map(str::to_string),
+                at_ms: now_ms,
+            }))
+        }
+        "control_cancel_request" => Some(Control::Withdrawn(text(&v, "request_id"))),
+        _ => None,
+    }
+}
+
+/// The line that answers a permission question.
+pub fn answer_line(ask: &Ask, allow: bool, why: &str) -> String {
+    let mut decision = if allow {
+        json!({"behavior": "allow", "updatedInput": ask.input})
+    } else {
+        let why = if why.trim().is_empty() {
+            "The person directing this session refused this step."
+        } else {
+            why.trim()
+        };
+        json!({"behavior": "deny", "message": why})
+    };
+    if let Some(id) = &ask.tool_use_id {
+        decision["toolUseID"] = json!(id);
+    }
+    json!({
+        "type": "control_response",
+        "response": {"subtype": "success", "request_id": ask.request_id, "response": decision},
+    })
+    .to_string()
 }
 
 // ---- the session as a map ---------------------------------------------------
@@ -819,6 +992,10 @@ fn print_step(name: &str, step: &Step) {
             cost.map(|c| format!(" (${c:.4})")).unwrap_or_default(),
             clip(text, 160)
         ),
+        What::NeedsYou { tool, detail } => format!("asks to use {tool}: {}", clip(detail, 140)),
+        What::Decided { tool, allowed } => {
+            format!("{tool} was {}", if *allowed { "allowed" } else { "refused" })
+        }
         What::Problem(text) => format!("problem: {text}"),
         What::Ended => "the process ended".to_string(),
     };
@@ -1010,6 +1187,7 @@ mod tests {
         assert!(read_only.windows(2).any(|w| w == ["--output-format", "stream-json"]));
         assert!(read_only.windows(2).any(|w| w == ["--input-format", "stream-json"]));
         assert!(!read_only.contains(&"--permission-mode"));
+        assert!(!read_only.contains(&"--permission-prompt-tool"));
         // The login must be the user's own, which this flag would bypass.
         assert!(!read_only.contains(&"--bare"));
         assert!(claude_args(Leave::EditFiles)
@@ -1066,5 +1244,86 @@ mod tests {
         assert_eq!(read.leaves[0].full, "other/main.rs");
         let bash = &map[1];
         assert_eq!((bash.count, bash.failed_ms, bash.waiting), (2, Some(21), true));
+    }
+
+    #[test]
+    fn a_permission_question_is_read_and_answered_in_the_tools_own_shape() {
+        let line = r#"{"type":"control_request","request_id":"req-7","request":{"subtype":"can_use_tool","tool_name":"Bash","display_name":"Bash","input":{"command":"rm -rf build","description":"Clear the build folder"},"description":"Remove the build folder","permission_suggestions":[],"decision_reason":"No rule allows this command","tool_use_id":"toolu_1"}}"#;
+        let Some(Control::Ask(ask)) = parse_control(line, 9) else {
+            panic!("not read as a question");
+        };
+        assert_eq!((ask.request_id.as_str(), ask.tool.as_str()), ("req-7", "Bash"));
+        assert_eq!(ask.detail, "rm -rf build");
+        assert_eq!(ask.description, "Remove the build folder");
+        assert_eq!(ask.reason, "No rule allows this command");
+
+        // Allowing hands the call back exactly as it was asked.
+        let yes: Value = serde_json::from_str(&answer_line(&ask, true, "")).unwrap();
+        assert_eq!(yes["type"], "control_response");
+        assert_eq!(yes["response"]["subtype"], "success");
+        assert_eq!(yes["response"]["request_id"], "req-7");
+        assert_eq!(yes["response"]["response"]["behavior"], "allow");
+        assert_eq!(yes["response"]["response"]["updatedInput"], ask.input);
+        assert_eq!(yes["response"]["response"]["toolUseID"], "toolu_1");
+
+        // Refusing always says something, so the agent knows it was a person.
+        let no: Value = serde_json::from_str(&answer_line(&ask, false, "  ")).unwrap();
+        assert_eq!(no["response"]["response"]["behavior"], "deny");
+        assert!(no["response"]["response"]["message"].as_str().unwrap().contains("refused"));
+        let told: Value = serde_json::from_str(&answer_line(&ask, false, "use cargo clean")).unwrap();
+        assert_eq!(told["response"]["response"]["message"], "use cargo clean");
+        assert!(told["response"]["response"].get("updatedInput").is_none());
+    }
+
+    #[test]
+    fn other_control_lines_are_not_questions() {
+        let cancel = r#"{"type":"control_cancel_request","request_id":"req-7"}"#;
+        assert_eq!(parse_control(cancel, 0), Some(Control::Withdrawn("req-7".into())));
+        let reply = r#"{"type":"control_response","response":{"subtype":"success","request_id":"maestro-1"}}"#;
+        assert_eq!(parse_control(reply, 0), None);
+        let other = r#"{"type":"control_request","request_id":"x","request":{"subtype":"hook_callback"}}"#;
+        assert_eq!(parse_control(other, 0), None);
+        assert_eq!(parse_control(r#"{"type":"assistant"}"#, 0), None);
+    }
+
+    #[test]
+    fn questions_wait_on_their_session_until_answered_or_withdrawn() {
+        let mut feed = Feed::default();
+        let ask = |id: &str| Ask {
+            request_id: id.into(),
+            tool: "Bash".into(),
+            detail: "ls".into(),
+            description: String::new(),
+            reason: String::new(),
+            input: json!({"command": "ls"}),
+            tool_use_id: None,
+            at_ms: 5,
+        };
+        feed.ask("run", ask("a"));
+        feed.ask("run", ask("b"));
+        assert_eq!(feed.sessions[0].asks.len(), 2);
+        assert!(matches!(feed.sessions[0].steps.back().unwrap().what, What::NeedsYou { .. }));
+        assert!(feed.settle("run", "a", Some(true)).is_some());
+        assert!(matches!(
+            &feed.sessions[0].steps.back().unwrap().what,
+            What::Decided { allowed: true, .. }
+        ));
+        // Withdrawn by the tool: gone, and nothing is claimed to have been decided.
+        let steps = feed.sessions[0].steps.len();
+        assert!(feed.settle("run", "b", None).is_some());
+        assert_eq!(feed.sessions[0].steps.len(), steps);
+        assert!(feed.sessions[0].asks.is_empty());
+        assert!(feed.settle("run", "b", Some(true)).is_none());
+    }
+
+    #[test]
+    fn asking_first_is_what_makes_the_tool_send_its_questions() {
+        let ask = claude_args(Leave::AskFirst);
+        assert!(ask.windows(2).any(|w| w == ["--permission-prompt-tool", "stdio"]));
+        assert!(!ask.contains(&"--permission-mode"));
+        let edits = claude_args(Leave::EditFiles);
+        assert!(edits.windows(2).any(|w| w == ["--permission-prompt-tool", "stdio"]));
+        // Read-only has nobody to ask, so the tool refuses by itself.
+        assert!(claude_args(Leave::ReadOnly).windows(2).any(|w| w == ["--permission-prompts", "none"]));
     }
 }
