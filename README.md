@@ -2,7 +2,7 @@
 
 Maestro is a planned replacement for the resource manager and the everyday operating-system interfaces, built for a machine whose main job is running AI agents. It shows everything running on your PC, shuts down whatever the current task does not need, and gives you one visual, manageable place to direct the agents doing the work.
 
-**Status: phases 1, 2 and 3 are running in a first form.** The app is a native Windows program that reads the machine, draws it, and can now act on it: pause, resume and end programs, clear the machine for a task, block a program on the network and switch an adapter off, each with a way back. This repo is public from day one so the design, the doubts and the decisions are all in the open.
+**Status: phases 1 to 4 are running in a first form.** The app is a native program, built on Windows first and now also on Linux, that reads the machine, draws it, and can act on it: pause, resume and end programs, clear the machine for a task, block a program on the network and switch an adapter off, each with a way back. This repo is public from day one so the design, the doubts and the decisions are all in the open.
 
 ## The vision
 
@@ -29,7 +29,7 @@ The full plan, including what each hard part takes, is in [docs/plan.md](docs/pl
 - **Everything running:** every process, grouped by program, with its processor share, memory, disk writes, the file on disk behind it and what started it.
 - **Every socket:** each open network socket is tied to the process that owns it, with the remote address and port.
 - **Four views of the same data:** tiles, a heat map sized by memory and coloured by load, a tree of what started what, and a map that joins programs to the programs they started.
-- **A first sorting of processes:** critical to Windows, part of Windows, background service, or app. A process using a critical Windows name from outside the Windows folder is flagged. This is judged from names, file locations and parentage; signatures are not checked yet.
+- **A first sorting of processes:** critical to the system, part of the system, background service, or app. A process using a critical system name from outside the system folders is flagged. This is judged from names, file locations and parentage; signatures are not checked yet.
 
 - **Controls, with a way back:**
   - **Pause and resume** a program. Pausing freezes it so it uses no processor, and nothing is lost.
@@ -46,9 +46,18 @@ The full plan, including what each hard part takes, is in [docs/plan.md](docs/pl
   - **Budgets and energy.** Give an agent a daily budget in dollars and its energy bar shows what is left. Passing the budget puts a warning in the action log.
   - **Quests.** Name a piece of work, assign it to an agent, and see what the agent reported spending on it.
 
+- **Depth over time**, on the Timeline page:
+  - **Timeline.** The last hour, 6 hours or 24 hours, one line a minute: processor load, memory, download and upload, with a mark wherever something happened. Hover for that minute's figures. It keeps recording while the window is minimised.
+  - **Events.** Every action, warning, agent starting or stopping, and achievement, newest first.
+  - **Ledger.** What each agent reported spending today, over 7 days, over 30 days and in total, with a row for all agents together.
+  - **Log book.** Thirteen achievements, such as keeping the processor calm for an hour or finishing ten quests, each with its progress.
+  - All of this is kept in a file on this computer and sent nowhere.
+
 Not there yet: graphics load, hostnames and locations for connections, signature checks, saved task profiles, hardware controls, and stopping an agent automatically when its budget runs out. See the plan for the order.
 
-What has been tested: pause, resume, end, the locks and resume-on-close were run against a throwaway process, and the planning and script-building logic has unit tests. The network block and adapter switch need Windows' permission prompt and have not been run yet. The buttons have been seen on screen but not clicked through by a person. The agent recogniser was run on a machine with Claude Code, the Claude app, Copilot and Ollama; the other agents' rules are untested. The usage receiver was tested with a sample report, not yet with a real agent.
+What has been tested: pause, resume, end, the locks and resume-on-close were run against a throwaway process, and the planning and script-building logic has unit tests. The network block and adapter switch need Windows' permission prompt and have not been run yet. The buttons have been seen on screen but not clicked through by a person. The agent recogniser was run on a machine with Claude Code, the Claude app, Copilot and Ollama; the other agents' rules are untested. The usage receiver was tested with a sample report, not yet with a real agent. The timeline, events and log book were seen on screen with a few minutes of real data; the ledger has only been seen empty, and its sums are covered by a unit test.
+
+Two known problems, both there before phase 4 and not yet fixed. A running copy of Maestro has been seen to close by itself when a second copy started with `--screenshot` finishes, in roughly one run in six; the cause is not found. And when every processor core is busy, one sample can take two or three seconds instead of about 16 ms; giving the sampling thread a higher priority is the likely fix and has not been tried.
 
 ## Build and run
 
@@ -61,6 +70,7 @@ cargo run --release
 Other ways to start it:
 
 - `cargo run -- --view heat` opens on a chosen view: `tiles`, `heat`, `tree` or `mold`.
+- `cargo run -- --page timeline` opens on the Timeline page.
 - `cargo run -- --dump` prints one sample of the machine as JSON and exits, without opening a window.
 - `cargo run -- --screenshot shot.png` opens the window, saves one picture of it and exits.
 - `cargo run --release -- --profile` times each part of a sample, to show what the monitor itself costs.
@@ -70,7 +80,21 @@ Other ways to start it:
 - `cargo run -- --focus-plan code.exe` lists what clearing the machine for that program would pause. It changes nothing.
 - `cargo test` runs the unit tests.
 
-It is built and tested on Windows 11. Linux and macOS are planned for phase 4 and are untested.
+### Windows, Linux and macOS
+
+| | Windows 11 | Linux | macOS |
+|---|---|---|---|
+| Builds and passes its tests | yes | yes, on Ubuntu 22.04 under WSL | not tried |
+| Reads the machine | yes | yes, run from the command line | written, never run |
+| Pause, resume, end, and the locks | yes | yes, run against a throwaway process | written, never run |
+| Finds agents | yes | yes, one agent tried | written, never run |
+| The window | yes | not seen: the test machine has no EGL or xkbcommon-x11 library, so it could not open | not tried |
+| Switch an adapter off | written, not run | written, not run (asks through polkit) | written, never run |
+| Block one program on the network | written, not run | not built | not built |
+
+Blocking one program takes a different mechanism on each system. On Linux it is a control group for the program and an nftables rule that matches it. On macOS it is a Network Extension content filter, which has to be signed with an Apple developer identity. The macOS column needs someone with a Mac: the code was written from documentation, and nothing in it has been compiled or run.
+
+Maestro keeps its files in `%LOCALAPPDATA%\Maestro` on Windows, `~/.local/state/maestro` on Linux and `~/Library/Application Support/Maestro` on macOS.
 
 ## What it will not claim
 

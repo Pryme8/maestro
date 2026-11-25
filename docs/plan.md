@@ -1,6 +1,6 @@
 # Maestro: plan
 
-As of 2026-11-24. Phases 1, 2 and 3 are running in a first form. Nothing after them is built.
+As of 2026-11-24. Phases 1 to 4 are running in a first form. The router, phase 5, is not built.
 
 ## Vision
 
@@ -23,7 +23,7 @@ This is the foundation, built in phases 1 and 2.
 - **Acting on a process does not reach what it started.** Pausing a launcher leaves the program it launched running. Actions today apply to every process with the same program name; acting on a whole family tree at once is the next control to add.
 - **Never left frozen:** everything paused is written to disk first, resumed when the app closes, and offered for resuming at the next start after a crash.
 - **Many views of the same data:** no single picture suits every question, so the running programs can be drawn several ways. Built so far: tiles, a heat map sized by memory and coloured by load, a tree of what started what, and a map that joins programs to the programs they started. More views are welcome wherever they help a person understand and control what is going on.
-- **Critical or extra:** every process is sorted in plain words: critical to Windows, part of Windows, background service, or app. A process using a critical Windows name from outside the Windows folder is flagged. Today this is judged from names, file locations and parentage. Signature checks come next, and this sorting is what task profiles will use to decide what is safe to stop.
+- **Critical or extra:** every process is sorted in plain words: critical to the system, part of the system, background service, or app. A process using a critical system name from outside the system folders is flagged. Each operating system has its own rules for this. Today this is judged from names, file locations and parentage. Signature checks come next, and this sorting is what task profiles will use to decide what is safe to stop.
 
 Clearing the machine frees memory, CPU and GPU for local work such as builds and local models. It does not make a cloud-hosted model answer faster, and the app does not claim it does.
 
@@ -69,6 +69,18 @@ Built in phase 3, in a first form.
 - **Budgets:** a daily dollar limit per agent. The energy bar shows what is left and passing it logs a warning. Pausing an agent automatically when its budget runs out is the next step and will be opt-in.
 - **Quests:** a named piece of work assigned to an agent, with what the agent reported spending since it started.
 - **What reporting needs:** an agent only shows spending if it reports it. Subscription plans report tokens but not a real bill, so cost there is the vendor's own estimate. This is the same limit the router's ledger works within.
+
+## Depth
+
+Built in phase 4, in a first form.
+
+- **History:** the sampling thread writes one line per minute with average and peak processor load, memory, download, upload, agents running and processes paused. A day of minutes is kept. It is recorded off the window's thread, so it carries on while the window is minimised.
+- **Timeline:** the history drawn over 1, 6 or 24 hours, with a mark for each event and that minute's figures under the pointer. Gaps show when Maestro was not running.
+- **Events:** actions, warnings, agents starting and stopping, and achievements. The last 400 are kept.
+- **Account totals:** the receiver now keeps each finished day, so the ledger can show what every agent reported today, over 7 days, over 30 days and in total. Up to 400 days are kept. These are the figures the router's ledger will start from.
+- **Achievements:** judged from running counts that only go up, such as processes paused, quests finished and the longest calm stretch. They are there to make good habits visible, and none of them rewards spending more.
+- **Linux and macOS:** the rules that differ per system sit behind one interface each: how processes are sorted, how a process is paused and ended, how an adapter is switched, and where files are kept. Linux builds, passes its tests and runs from the command line. macOS is written from documentation and has never been compiled.
+- **Still open in this phase:** a longer history than a day, per-program lines on the timeline, the Linux and macOS ways of blocking one program, and a first run on a Mac.
 
 ## The router layer
 
@@ -119,7 +131,7 @@ The router is phase 5, but a bare ledger and advisor are trialled first as a sta
 1. **Monitor and base:** read-only system telemetry, in the game style.
 2. **Controls:** task profiles that stop what a task does not need, plus process, network and adapter actions, all with undo.
 3. **Agents:** recogniser, telemetry receiver, crew, quests and budgets.
-4. **Depth:** timeline, achievements, account totals, then Linux and macOS.
+4. **Depth:** timeline, achievements, account totals, then Linux and macOS. Built, except that macOS has never been compiled and the Linux window has not been seen.
 5. **Router:** the advisor first, since it only needs the ledger, then the managed environment and the relay. It depends on phase 3 only, so it can move ahead of phases 1, 2 and 4 if the trial pays off.
 
 Cursor and Claude adapters are built first. Each phase works on its own, so the build can stop after any of them.

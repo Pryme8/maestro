@@ -14,6 +14,18 @@ pub(super) enum Undo {
     EnableAdapter(String),
 }
 
+/// Something that just happened, waiting to be written into the history.
+pub(super) enum Happened {
+    /// A line that went into the action log.
+    Note { text: String, ok: bool },
+    Paused(usize),
+    Ended(usize),
+    Blocked,
+    AdapterOff,
+    Cleared,
+    QuestDone,
+}
+
 /// One line in the action log.
 struct Entry {
     at: Instant,
@@ -62,8 +74,10 @@ pub(super) struct State {
     adapter_confirm: bool,
     tx: Sender<Outcome>,
     rx: Receiver<Outcome>,
-    /// Jobs waiting on Windows' permission prompt.
+    /// Jobs waiting on the system's permission prompt.
     waiting: usize,
+    /// Emptied into the history every frame.
+    pub(super) happened: Vec<Happened>,
 }
 
 impl State {
@@ -80,6 +94,7 @@ impl State {
             tx,
             rx,
             waiting: 0,
+            happened: Vec::new(),
         };
         if !state.journal.paused.is_empty() {
             let left = state.journal.paused.clone();
@@ -106,6 +121,19 @@ impl State {
     }
 
     pub(super) fn note(&mut self, text: String, ok: bool, undo: Option<Undo>) {
+        self.happened.push(Happened::Note {
+            text: text.clone(),
+            ok,
+        });
+        self.show(text, ok, undo);
+    }
+
+    /// A line for the action log that the history already has.
+    pub(super) fn announce(&mut self, text: String) {
+        self.show(text, true, None);
+    }
+
+    fn show(&mut self, text: String, ok: bool, undo: Option<Undo>) {
         self.log.push(Entry {
             at: Instant::now(),
             text,
@@ -134,6 +162,7 @@ impl State {
         self.journal.paused.extend(done.iter().cloned());
         self.journal.save();
         if !done.is_empty() {
+            self.happened.push(Happened::Paused(done.len()));
             self.note(
                 format!("Paused {label} ({} processes)", done.len()),
                 true,
@@ -183,6 +212,7 @@ impl State {
         self.journal.paused.retain(|p| !list.contains(p));
         self.journal.save();
         if count > 0 {
+            self.happened.push(Happened::Ended(count));
             self.note(format!("Ended {label} ({count} processes)"), true, None);
         }
         if let Some(e) = problem {
@@ -190,7 +220,7 @@ impl State {
         }
     }
 
-    /// Start a job that Windows will ask permission for. The answer arrives
+    /// Start a job that the system will ask permission for. The answer arrives
     /// through `poll`, so the window never freezes while the prompt is up.
     fn elevated(
         &mut self,
@@ -230,6 +260,7 @@ impl State {
                     let undo = match outcome.effect {
                         Effect::Blocked(program) => {
                             self.journal.blocked.push(program.clone());
+                            self.happened.push(Happened::Blocked);
                             Some(Undo::Unblock(program))
                         }
                         Effect::Unblocked(program) => {
@@ -238,6 +269,7 @@ impl State {
                         }
                         Effect::AdapterOff(adapter) => {
                             self.journal.adapters_off.push(adapter.clone());
+                            self.happened.push(Happened::AdapterOff);
                             Some(Undo::EnableAdapter(adapter))
                         }
                         Effect::AdapterOn(adapter) => {
@@ -365,10 +397,7 @@ impl App {
             } else if let Some(exe) = group.procs.iter().find_map(|p| p.exe.as_deref()) {
                 if ui
                     .button("Block network")
-                    .on_hover_text(
-                        "Adds Windows Firewall rules so this program cannot send or receive. \
-                         Windows will ask for permission first.",
-                    )
+                    .on_hover_text(control::BLOCK_HINT)
                     .clicked()
                 {
                     ctl.elevated(
@@ -466,7 +495,7 @@ impl App {
                     }
                     if ctl.waiting > 0 {
                         ui.label(
-                            RichText::new("Waiting for Windows' permission…")
+                            RichText::new("Waiting for permission…")
                                 .color(AMBER)
                                 .size(11.0),
                         );
@@ -552,8 +581,11 @@ impl App {
                 );
                 ui.label(
                     RichText::new(
-                        "Paused programs keep their memory until they are ended. Windows \
-                         itself is never paused.",
+                        concat!(
+                        "Paused programs keep their memory until they are ended. ",
+                        os!(),
+                        " itself is never paused."
+                    ),
                     )
                     .color(DIM)
                     .size(11.0),
@@ -615,6 +647,7 @@ impl App {
                 .collect();
             let label = format!("programs to clear the machine for {}", focus.task);
             ctl.focus = None;
+            ctl.happened.push(Happened::Cleared);
             ctl.pause(&label, list);
         } else if cancel || !open {
             ctl.focus = None;
@@ -649,7 +682,7 @@ impl App {
                     }
                 }
                 ui.label(
-                    RichText::new("Windows will ask for permission first.")
+                    RichText::new(concat!(os!(), " will ask for permission first."))
                         .color(DIM)
                         .size(11.0),
                 );

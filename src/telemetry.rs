@@ -263,12 +263,23 @@ impl Sampler {
             .sys
             .processes()
             .iter()
+            // Linux lists each thread as well; only whole processes are wanted.
+            .filter(|(_, p)| p.thread_kind().is_none())
             .map(|(pid, p)| {
                 let io = p.disk_usage();
+                let parent_pid = p.parent().map(|pp| pp.as_u32());
+                let mut name = p.name().to_string_lossy().into_owned();
+                // Linux kernel workers are numbered, such as "kworker/3:1".
+                // Dropping the number shows them as one program.
+                if cfg!(target_os = "linux") && parent_pid == Some(2) {
+                    if let Some((kind, _)) = name.split_once('/') {
+                        name = kind.to_string();
+                    }
+                }
                 Proc {
                     pid: pid.as_u32(),
-                    parent_pid: p.parent().map(|pp| pp.as_u32()),
-                    name: p.name().to_string_lossy().into_owned(),
+                    parent_pid,
+                    name,
                     exe: p.exe().map(|e| e.to_string_lossy().into_owned()),
                     cpu_percent: p.cpu_usage() / cores,
                     memory_bytes: p.memory(),

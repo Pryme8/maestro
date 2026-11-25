@@ -6,15 +6,16 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// The standard port for OpenTelemetry over HTTP.
 pub const PORT: u16 = 4318;
 const MAX_BODY: u64 = 8 * 1024 * 1024;
+const FILE: &str = "usage.json";
+const DAYS_KEPT: usize = 400;
 
 #[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, PartialEq)]
 pub struct Totals {
@@ -29,6 +30,14 @@ impl Totals {
     pub fn tokens(&self) -> f64 {
         self.tokens_in + self.tokens_out + self.cache_read + self.cache_write
     }
+
+    pub fn add(&mut self, other: &Totals) {
+        self.cost_usd += other.cost_usd;
+        self.tokens_in += other.tokens_in;
+        self.tokens_out += other.tokens_out;
+        self.cache_read += other.cache_read;
+        self.cache_write += other.cache_write;
+    }
 }
 
 /// Everything agents have reported, by agent id.
@@ -39,6 +48,9 @@ pub struct Store {
     pub today: HashMap<String, Totals>,
     /// Never reset, so work tracked across midnight keeps adding up.
     pub lifetime: HashMap<String, Totals>,
+    /// Finished days, by days since 1970 in UTC. The last `DAYS_KEPT` are kept.
+    #[serde(default)]
+    pub days: BTreeMap<u64, HashMap<String, Totals>>,
     /// Last value of each cumulative series, to turn it into increases.
     #[serde(skip)]
     last_seen: HashMap<String, f64>,
@@ -55,40 +67,52 @@ fn now_ms() -> u64 {
 }
 
 impl Store {
-    fn path() -> PathBuf {
-        let base = std::env::var_os("LOCALAPPDATA")
-            .or_else(|| std::env::var_os("XDG_STATE_HOME"))
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
-        base.join("Maestro").join("usage.json")
-    }
-
     pub fn load() -> Self {
-        let mut store: Store = std::fs::read_to_string(Self::path())
-            .ok()
+        let mut store: Store = crate::paths::load(FILE)
             .and_then(|text| serde_json::from_str(&text).ok())
             .unwrap_or_default();
-        store.roll_day();
+        if store.roll_day() {
+            store.save();
+        }
         store
     }
 
     fn save(&self) {
-        let path = Self::path();
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
         if let Ok(text) = serde_json::to_string_pretty(self) {
-            let _ = std::fs::write(path, text);
+            crate::paths::save(FILE, &text);
         }
     }
 
-    /// Start a fresh "today" when the UTC day changes.
-    pub fn roll_day(&mut self) {
-        let day = now_ms() / 86_400_000;
-        if self.day != day {
-            self.day = day;
-            self.today.clear();
+    /// Start a fresh "today" when the UTC day changes. Returns true if it did.
+    pub fn roll_day(&mut self) -> bool {
+        self.roll_to(now_ms() / 86_400_000)
+    }
+
+    fn roll_to(&mut self, day: u64) -> bool {
+        if self.day == day {
+            return false;
         }
+        let finished = std::mem::take(&mut self.today);
+        if !finished.is_empty() {
+            self.days.insert(self.day, finished);
+        }
+        while self.days.len() > DAYS_KEPT {
+            self.days.pop_first();
+        }
+        self.day = day;
+        true
+    }
+
+    /// What each agent reported over the last `span` days, today included.
+    pub fn over(&self, span: u64) -> HashMap<String, Totals> {
+        let from = (self.day + 1).saturating_sub(span);
+        let mut sum = self.today.clone();
+        for day in self.days.range(from..self.day).map(|(_, day)| day) {
+            for (agent, totals) in day {
+                sum.entry(agent.clone()).or_default().add(totals);
+            }
+        }
+        sum
     }
 
     /// Take the usage figures out of one OpenTelemetry metrics message.
@@ -357,6 +381,25 @@ mod tests {
         assert_eq!(totals.cost_usd, 1.5);
         assert_eq!(totals.tokens_in, 1800.0);
         assert_eq!(totals.tokens_out, 100.0);
+    }
+
+    #[test]
+    fn finished_days_are_kept_and_summed_over_a_span() {
+        let mut store = Store::default();
+        store.roll_to(100);
+        store.apply(&message(1, 1.0, "100", "0"));
+        store.roll_to(101);
+        store.apply(&message(1, 2.0, "200", "0"));
+        // A day with nothing reported leaves no entry.
+        store.roll_to(102);
+        store.roll_to(110);
+        store.apply(&message(1, 4.0, "400", "0"));
+        assert_eq!(store.days.keys().copied().collect::<Vec<_>>(), [100, 101]);
+        assert_eq!(store.over(1)["claude-code"].cost_usd, 4.0);
+        // Ten days back from day 110 reaches day 101 but not day 100.
+        assert_eq!(store.over(10)["claude-code"].cost_usd, 6.0);
+        assert_eq!(store.over(30)["claude-code"].cost_usd, 7.0);
+        assert_eq!(store.lifetime["claude-code"].tokens_in, 700.0);
     }
 
     #[test]

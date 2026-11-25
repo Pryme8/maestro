@@ -4,11 +4,14 @@
 
 mod controls;
 mod crew;
+mod timeline;
 mod views;
 
+pub use timeline::Page;
 pub use views::View;
 
 use crate::classify::{classify, Class};
+use crate::history::{History, Reading};
 use crate::telemetry::{Proc, Sampler, Snapshot};
 use eframe::egui::{
     self, pos2, vec2, Align, Align2, Color32, CornerRadius, FontId, Layout, Margin, Rect,
@@ -16,7 +19,9 @@ use eframe::egui::{
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::mpsc::{sync_channel, Receiver, TrySendError};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const BG: Color32 = Color32::from_rgb(11, 16, 22);
@@ -46,6 +51,20 @@ struct Shot {
     requested: bool,
 }
 
+/// Counts the window knows and the sampling thread writes into the history.
+#[derive(Default)]
+struct Live {
+    agents: AtomicU32,
+    paused: AtomicU32,
+}
+
+impl Live {
+    fn set(&self, agents: usize, paused: usize) {
+        self.agents.store(agents as u32, Ordering::Relaxed);
+        self.paused.store(paused as u32, Ordering::Relaxed);
+    }
+}
+
 pub struct App {
     rx: Receiver<Snapshot>,
     snap: Option<Snapshot>,
@@ -63,6 +82,11 @@ pub struct App {
     ctl: controls::State,
     /// Phase 3: the AI agents, what they report and what they may spend.
     crew: crew::Crew,
+    /// Phase 4: what happened over time.
+    history: Arc<Mutex<History>>,
+    live: Arc<Live>,
+    page: Page,
+    tl: timeline::Timeline,
     shot: Option<Shot>,
 }
 
@@ -84,19 +108,42 @@ impl App {
         cc: &eframe::CreationContext<'_>,
         screenshot: Option<PathBuf>,
         view: View,
+        page: Page,
         select: Option<String>,
         preview_focus: bool,
     ) -> Self {
         apply_style(&cc.egui_ctx);
 
         // Sample on a background thread so reading the machine never stalls the window.
-        let (tx, rx) = channel();
+        // Room for one: while the window is minimised and not drawing, new
+        // samples are dropped instead of piling up.
+        let (tx, rx) = sync_channel(1);
         let ctx = cc.egui_ctx.clone();
+        let history = Arc::new(Mutex::new(History::load()));
+        let live = Arc::new(Live::default());
+        let (history_thread, live_thread) = (history.clone(), live.clone());
         std::thread::spawn(move || {
             let mut sampler = Sampler::new();
             loop {
                 std::thread::sleep(Duration::from_millis(1000));
-                if tx.send(sampler.sample()).is_err() {
+                let snap = sampler.sample();
+                // The history is kept here, not in the window, so it carries
+                // on while the window is minimised and drawing nothing.
+                if let Ok(mut history) = history_thread.lock() {
+                    let reading = Reading {
+                        at_ms: snap.taken_ms,
+                        cpu: snap.cpu.total_percent,
+                        mem: ratio(snap.memory.used_bytes, snap.memory.total_bytes) * 100.0,
+                        down: snap.networks.iter().map(|n| n.down_bytes_per_sec).sum(),
+                        up: snap.networks.iter().map(|n| n.up_bytes_per_sec).sum(),
+                        agents: live_thread.agents.load(Ordering::Relaxed),
+                        paused: live_thread.paused.load(Ordering::Relaxed),
+                    };
+                    if history.record(reading) {
+                        history.save();
+                    }
+                }
+                if let Err(TrySendError::Disconnected(_)) = tx.try_send(snap) {
                     break;
                 }
                 ctx.request_repaint();
@@ -116,6 +163,10 @@ impl App {
             filter: String::new(),
             ctl: controls::State::load(),
             crew: crew::Crew::start(&cc.egui_ctx),
+            history,
+            live,
+            page,
+            tl: timeline::Timeline::new(),
             shot: screenshot.map(|path| Shot {
                 path,
                 requested: false,
@@ -187,7 +238,8 @@ impl eframe::App for App {
             }
         }
         let found = self.crew.recogniser.find(&snap);
-        hud(ctx, &snap, groups.len());
+        self.keep_history(&found);
+        hud(ctx, &snap, groups.len(), &mut self.page);
         self.action_log(ctx);
 
         if let Some(name) = self.selected.clone() {
@@ -212,14 +264,17 @@ impl eframe::App for App {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    if let Some(adapter) = rooms(ui, &snap) {
-                        self.open_adapter(adapter);
+                .show(ui, |ui| match self.page {
+                    Page::Base => {
+                        if let Some(adapter) = rooms(ui, &snap) {
+                            self.open_adapter(adapter);
+                        }
+                        ui.add_space(4.0);
+                        self.crew_ui(ui, &found);
+                        ui.add_space(14.0);
+                        self.crew(ui, &snap, &groups);
                     }
-                    ui.add_space(4.0);
-                    self.crew_ui(ui, &found);
-                    ui.add_space(14.0);
-                    self.crew(ui, &snap, &groups);
+                    Page::Timeline => self.timeline_ui(ui),
                 });
         });
 
@@ -240,7 +295,7 @@ fn apply_style(ctx: &egui::Context) {
     ctx.set_visuals(visuals);
 }
 
-fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize) {
+fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize, page: &mut Page) {
     egui::TopBottomPanel::top("hud")
         .frame(
             egui::Frame::new()
@@ -252,6 +307,10 @@ fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize) {
                 ui.label(RichText::new("MAESTRO").color(TEAL).strong().size(18.0));
                 ui.add_space(8.0);
                 ui.label(RichText::new("LIVE").color(AMBER).size(11.0));
+                ui.add_space(12.0);
+                ui.selectable_value(page, Page::Base, "Base");
+                ui.selectable_value(page, Page::Timeline, "Timeline")
+                    .on_hover_text("The last day, what happened, what agents spent, and achievements.");
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let os = format!(
                         "{} {}",
@@ -721,7 +780,7 @@ fn class_colour(class: Class) -> Color32 {
     match class {
         Class::App => TEAL,
         Class::Service => VIOLET,
-        Class::Windows => SLATE,
+        Class::System => SLATE,
         Class::Critical => BLUE,
         Class::Suspect => RED,
     }

@@ -1,9 +1,31 @@
 // Hide the extra console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+/// The name of the operating system this build is for, usable in `concat!`.
+#[cfg(windows)]
+macro_rules! os {
+    () => {
+        "Windows"
+    };
+}
+#[cfg(target_os = "macos")]
+macro_rules! os {
+    () => {
+        "macOS"
+    };
+}
+#[cfg(not(any(windows, target_os = "macos")))]
+macro_rules! os {
+    () => {
+        "Linux"
+    };
+}
+
 mod agents;
 mod classify;
 mod control;
+mod history;
+mod paths;
 mod receiver;
 mod telemetry;
 mod ui;
@@ -122,6 +144,11 @@ fn main() -> eframe::Result<()> {
         .and_then(|name| ui::View::parse(name))
         .unwrap_or(ui::View::Tiles);
 
+    // `--page base|timeline` picks the page the window opens on.
+    let page = arg_after(&args, "--page")
+        .and_then(ui::Page::parse)
+        .unwrap_or(ui::Page::Base);
+
     // `--select <program>` opens with that program's details showing, and
     // `--preview-focus` also opens its clear-the-machine preview. Neither changes anything.
     let select = arg_after(&args, "--select").map(str::to_string);
@@ -141,7 +168,7 @@ fn main() -> eframe::Result<()> {
             viewport,
             ..Default::default()
         },
-        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, view, select, preview_focus)))),
+        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, view, page, select, preview_focus)))),
     )
 }
 

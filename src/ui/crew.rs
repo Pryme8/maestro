@@ -41,6 +41,36 @@ impl Crew {
     }
 }
 
+/// What agents have reported, over four spans of time.
+pub(super) struct Ledger {
+    pub(super) today: HashMap<String, Totals>,
+    pub(super) week: HashMap<String, Totals>,
+    pub(super) month: HashMap<String, Totals>,
+    pub(super) lifetime: HashMap<String, Totals>,
+}
+
+impl Crew {
+    pub(super) fn ledger(&self) -> Ledger {
+        match self.store.lock() {
+            Ok(mut store) => {
+                store.roll_day();
+                Ledger {
+                    today: store.today.clone(),
+                    week: store.over(7),
+                    month: store.over(30),
+                    lifetime: store.lifetime.clone(),
+                }
+            }
+            Err(_) => Ledger {
+                today: HashMap::new(),
+                week: HashMap::new(),
+                month: HashMap::new(),
+                lifetime: HashMap::new(),
+            },
+        }
+    }
+}
+
 impl App {
     pub(super) fn crew_ui(&mut self, ui: &mut Ui, found: &[Agent<'_>]) {
         // Copy the totals out so the lock is not held while drawing.
@@ -289,6 +319,9 @@ impl App {
         }
         if let Some(i) = finish {
             self.ctl.journal.quests[i].done = true;
+            let title = self.ctl.journal.quests[i].title.clone();
+            self.ctl.happened.push(super::controls::Happened::QuestDone);
+            self.ctl.note(format!("Finished quest: {title}"), true, None);
             self.ctl.journal.save();
         }
         if let Some(i) = remove {
@@ -401,8 +434,11 @@ impl App {
 }
 
 /// A count in short form: 950, 34k, 1.2M.
-fn count(n: f64) -> String {
-    if n >= 1_000_000.0 {
+pub(super) fn count(n: f64) -> String {
+    // An empty sum is minus zero, which would print as "-0".
+    if n <= 0.0 {
+        "0".to_string()
+    } else if n >= 1_000_000.0 {
         format!("{:.1}M", n / 1_000_000.0)
     } else if n >= 10_000.0 {
         format!("{:.0}k", n / 1_000.0)

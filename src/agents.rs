@@ -147,7 +147,26 @@ fn command_line(pid: u32) -> Option<String> {
     crate::winproc::command_line(pid)
 }
 
-#[cfg(not(all(windows, target_pointer_width = "64")))]
+#[cfg(unix)]
+fn command_line(pid: u32) -> Option<String> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    let pid = Pid::from_u32(pid);
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always),
+    );
+    let words: Vec<String> = sys
+        .process(pid)?
+        .cmd()
+        .iter()
+        .map(|word| word.to_string_lossy().into_owned())
+        .collect();
+    (!words.is_empty()).then(|| words.join(" "))
+}
+
+#[cfg(not(any(unix, all(windows, target_pointer_width = "64"))))]
 fn command_line(_pid: u32) -> Option<String> {
     None
 }
