@@ -509,13 +509,13 @@ fn session_map(ui: &mut Ui, now: u64, title: &str, busy: bool, branches: &[live:
         if branch.leaves.len() > leaves.len() {
             name.push_str(&format!("  +{}", branch.leaves.len() - leaves.len()));
         }
-        painter.text(
-            at + vec2(0.0, if below { -radius - 9.0 } else { radius + 9.0 }),
-            Align2::CENTER_CENTER,
-            name,
-            FontId::proportional(11.5),
-            lerp(DIM, TEXT, heat.max(0.35)),
-        );
+        // The name sits on the line to the agent, so it gets a backing to stay readable.
+        let name_colour = lerp(DIM, TEXT, heat.max(0.35));
+        let galley = painter.layout_no_wrap(name, FontId::proportional(11.5), name_colour);
+        let name_at = at + vec2(0.0, if below { -radius - 10.0 } else { radius + 10.0 });
+        let name_rect = Rect::from_center_size(name_at, galley.size());
+        painter.rect_filled(name_rect.expand2(vec2(4.0, 1.0)), CornerRadius::same(3), PANEL);
+        painter.galley(name_rect.min, galley, name_colour);
         let mut about = format!("{}\n{} calls, last {}", branch.tool, branch.count, ago(now, branch.last_ms));
         if branch.waiting {
             about.push_str("\nWaiting for a call to come back.");
