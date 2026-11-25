@@ -176,6 +176,13 @@ fn main() -> eframe::Result<()> {
     // into the folder and exits.
     let tour = arg_after(&args, "--tour").map(PathBuf::from);
 
+    // `--prefill <folder> <request>` opens the Live page with the start form
+    // filled in and the cheapest model chosen. It starts nothing.
+    let prefill = args
+        .iter()
+        .position(|a| a == "--prefill")
+        .and_then(|i| Some((args.get(i + 1)?.clone(), args.get(i + 2)?.clone())));
+
     // `--view tiles|heat|tree|mold` picks the view the window opens on.
     let view = args
         .iter()
@@ -187,7 +194,7 @@ fn main() -> eframe::Result<()> {
     // `--page base|timeline|network|live|router` picks the page the window opens on.
     let page = arg_after(&args, "--page")
         .and_then(ui::Page::parse)
-        .unwrap_or(ui::Page::Base);
+        .unwrap_or(if prefill.is_some() { ui::Page::Live } else { ui::Page::Base });
 
     // `--select <program>` opens with that program's details showing, and
     // `--preview-focus` also opens its clear-the-machine preview. Neither changes anything.
@@ -208,7 +215,7 @@ fn main() -> eframe::Result<()> {
             viewport,
             ..Default::default()
         },
-        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, tour, view, page, select, preview_focus)))),
+        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, tour, view, page, select, preview_focus, prefill.clone())))),
     )
 }
 

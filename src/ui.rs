@@ -143,6 +143,7 @@ impl App {
         page: Page,
         select: Option<String>,
         preview_focus: bool,
+        prefill: Option<(String, String)>,
     ) -> Self {
         apply_style(&cc.egui_ctx);
 
@@ -212,7 +213,7 @@ impl App {
             router: router::RouterUi::load(),
             names,
             net: network::NetUi::new(),
-            lv: live::LiveUi::start(&cc.egui_ctx),
+            lv: live::LiveUi::start(&cc.egui_ctx, prefill),
             stale,
             only_stale: false,
             shot: screenshot.map(|path| Shot {

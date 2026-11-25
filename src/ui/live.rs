@@ -28,6 +28,8 @@ pub(super) struct LiveUi {
     problem: Option<String>,
     /// Folders of the works in the managed environment, offered as places to run.
     works: Vec<(String, String)>,
+    /// The start form was filled in from the command line, so it opens by itself.
+    prefilled: bool,
     /// Draw the selected session as a map instead of a list.
     as_map: bool,
     /// Bring the map into view. Used when taking pictures of the pages.
@@ -54,7 +56,7 @@ enum Act {
 }
 
 impl LiveUi {
-    pub(super) fn start(ctx: &egui::Context) -> Self {
+    pub(super) fn start(ctx: &egui::Context, prefill: Option<(String, String)>) -> Self {
         let feed: Arc<Mutex<Feed>> = Arc::default();
         let wake = ctx.clone();
         live::watch(feed.clone(), move || wake.request_repaint());
@@ -78,11 +80,18 @@ impl LiveUi {
             why: String::new(),
             problem: None,
             works,
+            prefilled: false,
             as_map: true,
             show_map: false,
             services: Arc::default(),
             checking: Arc::default(),
         };
+        if let Some((folder, prompt)) = prefill {
+            ui.folder = folder;
+            ui.prompt = prompt;
+            ui.model = "haiku".to_string();
+            ui.prefilled = true;
+        }
         ui.check_services(ctx);
         ui
     }
@@ -173,7 +182,7 @@ impl App {
         // Start a run.
         egui::CollapsingHeader::new(RichText::new("Start a session from here").size(13.0))
             .id_salt("live-start")
-            .default_open(false)
+            .default_open(lv.prefilled)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Folder").color(DIM).size(11.0));
