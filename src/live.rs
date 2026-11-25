@@ -872,7 +872,7 @@ pub fn answer_line(ask: &Ask, allow: bool, why: &str) -> String {
         json!({"behavior": "allow", "updatedInput": ask.input})
     } else {
         let why = if why.trim().is_empty() {
-            "The person directing this session refused this step."
+            "The person directing this session looked at this step and refused it. Do not try it again another way; say that it was refused and ask what they would like instead."
         } else {
             why.trim()
         };
