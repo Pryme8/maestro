@@ -159,7 +159,7 @@ mod tests {
         ("environment.rs", "\"-lc\"", "the same call"),
         ("services.rs", "\"/c\"", "opens a terminal for a sign-in command that is fixed in the code"),
         ("services.rs", "\"/k\"", "the same call"),
-        ("services.rs", "\"-e\"", "the same on macOS and Linux"),
+        ("services.rs", "\"-e\"", "the same on Linux; on macOS the line also carries the sign-in folder, quoted by mac_sign_in_script"),
     ];
 
     #[test]
