@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maestro: the resource manager, rebuilt for agents</title>
+<meta name="description" content="Maestro shows everything running on your computer, shuts down what the task does not need, and gives you one place to watch and direct the AI agents doing the work. One native program. Nothing sent off your computer.">
+<meta property="og:title" content="Maestro: the resource manager, rebuilt for agents">
+<meta property="og:description" content="See everything running. Clear the machine for the task. Watch and direct your AI agents, one approved step at a time.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pryme8.github.io/maestro/">
+<meta property="og:image" content="https://pryme8.github.io/maestro/img/base.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="img/icon.png">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Set the theme before the first paint. Nothing is loaded from anywhere else.
+  try { var t = localStorage.getItem("maestro-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</head>
+<body>
+
+<header class="nav">
+  <a class="brand" href="#top"><img src="img/icon.png" width="28" height="28" alt=""> <span>MAESTRO</span></a>
+  <nav aria-label="Sections">
+    <a href="#features">Features</a>
+    <a href="#live">Live</a>
+    <a href="#trust">Trust</a>
+    <a href="#status">Status</a>
+    <a href="#get">Get it</a>
+  </nav>
+  <div class="nav-end">
+    <button id="theme" class="ghost" type="button" aria-label="Switch between light and dark">◐</button>
+    <a class="btn small" href="https://github.com/Pryme8/maestro">GitHub</a>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <svg class="constellation" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <g class="links">
+      <line x1="600" y1="300" x2="330" y2="170"/><line x1="600" y1="300" x2="880" y2="150"/>
+      <line x1="600" y1="300" x2="940" y2="420"/><line x1="600" y1="300" x2="280" y2="440"/>
+      <line x1="330" y1="170" x2="150" y2="90"/><line x1="330" y1="170" x2="120" y2="240"/>
+      <line x1="880" y1="150" x2="1060" y2="70"/><line x1="880" y1="150" x2="1100" y2="220"/>
+      <line x1="940" y1="420" x2="1110" y2="500"/><line x1="940" y1="420" x2="1000" y2="560"/>
+      <line x1="280" y1="440" x2="90" y2="520"/><line x1="280" y1="440" x2="200" y2="570"/>
+    </g>
+    <g class="leaves">
+      <circle cx="150" cy="90" r="4"/><circle cx="120" cy="240" r="4"/><circle cx="1060" cy="70" r="4"/>
+      <circle cx="1100" cy="220" r="4"/><circle cx="1110" cy="500" r="4"/><circle cx="1000" cy="560" r="4"/>
+      <circle cx="90" cy="520" r="4"/><circle cx="200" cy="570" r="4"/>
+    </g>
+    <g class="tools">
+      <circle cx="330" cy="170" r="11"/><circle cx="880" cy="150" r="11"/>
+      <circle cx="940" cy="420" r="11"/><circle cx="280" cy="440" r="11"/>
+    </g>
+    <circle class="ring" cx="940" cy="420" r="18"/>
+    <circle class="core" cx="600" cy="300" r="26"/>
+  </svg>
+
+  <p class="eyebrow"><span class="dot"></span> Early · open from day one · MIT</p>
+  <h1>The resource manager,<br><em>rebuilt for agents.</em></h1>
+  <p class="lede">Maestro shows everything running on your computer, shuts down whatever the task in hand does not need, and gives you one place to watch and direct the AI agents doing the work.</p>
+  <div class="cta">
+    <a class="btn" href="#get">Build it from source</a>
+    <a class="btn outline" href="https://github.com/Pryme8/maestro/blob/main/docs/README.md">Read the documentation</a>
+  </div>
+  <ul class="facts">
+    <li>One native program</li>
+    <li>Rust, no web view</li>
+    <li>No account, no telemetry</li>
+    <li>Windows first, Linux too</li>
+  </ul>
+
+  <figure class="shot hero-shot">
+    <div class="chrome"><i></i><i></i><i></i><span>Maestro · Base</span></div>
+    <img src="img/base.png" width="1320" height="548" alt="Maestro's Base page: panels for processor, memory, disks and network across the top, and the AI agents found on the machine listed below as crew, each with its process count, helpers, processor share and memory.">
+    <figcaption>The Base page on a real machine. Not a mock-up.</figcaption>
+  </figure>
+</section>
+
+<section class="why">
+  <p class="label">THE IDEA</p>
+  <h2>Your desktop assumes you are doing the work. <span class="dim">Increasingly, you are not.</span></h2>
+  <div class="cols">
+    <p>Task Manager, Settings and the file explorer were built for a person clicking through windows. When agents do most of the work, the machine should be organised around them: its resources given to the task in hand, its state visible at a glance, and its controls built for directing agents instead of launching apps.</p>
+    <p>Maestro is that environment. It runs on top of the operating system you already have and takes over the interfaces you use to see and manage it. It is one executable with no browser engine inside, because a tool whose job is to free the machine should not bring one with it.</p>
+  </div>
+</section>
+
+<section id="features" class="features">
+  <p class="label">WHAT WORKS TODAY</p>
+  <h2>Everything on the machine, and a hand on all of it.</h2>
+  <p class="sub">Each feature below says how far it has been tested. That line is taken from the project's own <a href="https://github.com/Pryme8/maestro/blob/main/docs/status.md">status page</a>.</p>
+
+  <div class="grid">
+    <article class="card wide">
+      <p class="tag">BASE</p>
+      <h3>Your machine as a base you can read at a glance</h3>
+      <p>Processor, memory, disks and network every second. Every process grouped by program, with the file on disk behind it and what started it. Draw the same data four ways: tiles, a heat map, a tree of what started what, and a map.</p>
+      <p>Each process is sorted in plain words as critical to the system, part of the system, a background service or an app. A program that has touched neither processor nor disk for 15 minutes is counted as cold, and a critical system name running from outside the system folders is flagged, because that is a common disguise.</p>
+      <p class="proof"><b>Tested</b> Seen on screen on Windows with real data. The cold count has unit tests; the stale flags have not yet been seen on screen.</p>
+    </article>
+
+    <article class="card">
+      <p class="tag">FOCUS</p>
+      <h3>Clear the machine for the task</h3>
+      <p>Pick the program that matters. Maestro lists what could be paused and pauses nothing until you confirm. The task, what started it and what it started are always left running. Save the set as a profile and use it again with one click.</p>
+      <p>Paused programs lose nothing and resume where they stopped. Everything paused is written to disk first and resumed when Maestro closes, so nothing is ever left frozen.</p>
+      <p class="proof"><b>Tested</b> Pause, resume, end and the locks were run on Windows and Linux. The buttons have been seen but not yet clicked through by a person.</p>
+    </article>
+
+    <article class="card">
+      <p class="tag">NETWORK</p>
+      <h3>Who every program is talking to</h3>
+      <p>Every connection sits under the program that opened it, with the name and owner behind each address, marked as this computer, your network or the internet. Every listening port is shown with whether other computers can reach it.</p>
+      <p class="proof"><b>Tested</b> Seen with real data on Windows. Blocking one program at the firewall is written and has not been run.</p>
+    </article>
+
+    <article class="card">
+      <p class="tag">CREW</p>
+      <h3>Your agents, recognised by themselves</h3>
+      <p>Claude Code, Cursor, Codex, Copilot, Gemini CLI, Ollama and others are found among the running programs with no setup. The shells and scripts an agent starts are counted with it, so the processor and memory shown are what it is really using.</p>
+      <p class="proof"><b>Tested</b> Run on a machine with Claude Code, the Claude app, Copilot and Ollama. The rules for the other agents are untested.</p>
+    </article>
+
+    <article class="card">
+      <p class="tag">LEDGER</p>
+      <h3>Honest accounting of cost and quota</h3>
+      <p>Agents that report usage show their tokens and cost for today, 7 days and 30 days. Set a daily budget per agent. List your AI accounts and the advisor proposes the cheapest route for a task, with the cost of the handoff counted in.</p>
+      <p>Subscription figures are labelled as estimates, because vendors do not publish them exactly. Maestro says so instead of guessing.</p>
+      <p class="proof"><b>Tested</b> The receiver was tested with a sample report, not yet a real agent. The advisor has unit tests and was run from the command line.</p>
+    </article>
+
+    <article class="card">
+      <p class="tag">CONTROL</p>
+      <h3>Every action can be undone or asks first</h3>
+      <p>An action log runs along the bottom of the window with an undo on everything that can be undone. Ending a program takes a second click. Processes the system needs are locked, from the window and the command line alike.</p>
+      <p class="proof"><b>Tested</b> The locks and resume-on-close were run against a throwaway process.</p>
+    </article>
+  </div>
+</section>
+
+<section id="live" class="live">
+  <p class="label">LIVE</p>
+  <h2>Watch an agent think. <em>Decide what it may do.</em></h2>
+  <p class="sub">The Live page starts Claude Code sessions, shows every step as it happens, and puts each risky one in front of you before it runs.</p>
+
+  <figure class="shot">
+    <div class="chrome"><i></i><i></i><i></i><span>Maestro · Live · map</span></div>
+    <img src="img/live-map.png" width="1320" height="577" loading="lazy" alt="The Live page's map of one agent session: the agent in the middle, the tools it used around it such as Bash, Read and Write, and the files and commands each tool was pointed at on the outside. A ring marks the tool whose call has not come back yet.">
+    <figcaption>One real session. The agent in the middle, its tools around it, what they touched on the outside. The ring is a call still running.</figcaption>
+  </figure>
+
+  <div class="steps">
+    <article>
+      <span class="n">01</span>
+      <h3>A live map of every tool call</h3>
+      <p>What was asked, what the agent said, each tool call with the command, file or search in it, and what came back. The most recent is brightest. A failed call turns its tool red.</p>
+    </article>
+    <article>
+      <span class="n">02</span>
+      <h3>Allow or refuse each step</h3>
+      <p>A session started from Maestro asks before every step that needs permission. You see the tool, the exact command or file and why it has to ask. No answer means no. A closed window means no.</p>
+    </article>
+    <article>
+      <span class="n">03</span>
+      <h3>A safe copy with rollback</h3>
+      <p>By default the session works in a separate copy of your repository on its own branch, with a snapshot taken first. See what it changed, keep it as a commit, or roll the whole thing back.</p>
+    </article>
+    <article>
+      <span class="n">04</span>
+      <h3>Work and personal, kept apart</h3>
+      <p>Keep several Claude Code sign-ins, each in a folder of its own, and pick the account and the model per session. Two accounts never share a sign-in, a setting or a history file.</p>
+    </article>
+  </div>
+  <p class="proof center"><b>Tested</b> A person drove a full session from the window on Windows: start, allow an edit, refuse a command, pause, resume and stop. A second real account has not been signed in yet, and Live works with Claude Code only today.</p>
+</section>
+
+<section id="trust" class="trust">
+  <p class="label">TRUST</p>
+  <h2>It runs with your rights. <span class="dim">So its rules are written down.</span></h2>
+  <p class="sub">Maestro can pause and end programs and sits beside your AI tools' sign-ins. These are the promises the code keeps today. Five of the eight are checked by tests on every pull request.</p>
+
+  <ol class="rules">
+    <li><b>It does not read sign-ins.</b> It points a tool at its folder and never opens what is inside. <span class="chk">held by a test</span></li>
+    <li><b>It does not keep keys.</b> It stores the name of a variable. The key is handed to the tool and never written, logged or shown.</li>
+    <li><b>It sends nothing off your computer.</b> No server of its own, no telemetry, no update check. <span class="chk">held by a test</span></li>
+    <li><b>Nothing listens where other computers can reach it.</b> <span class="chk">held by a test</span></li>
+    <li><b>It starts only programs on a short, written list</b> and does not build command lines from outside text. <span class="chk">held by a test</span></li>
+    <li><b>Administrator rights go through your system's own prompt,</b> every time. It never keeps raised rights.</li>
+    <li><b>An agent is refused unless you allow it.</b></li>
+    <li><b>It builds only from the public crate registry,</b> from fixed versions, with no build script. <span class="chk">held by a test</span></li>
+  </ol>
+  <p class="fine">The only thing that reaches a network by itself is a name lookup for addresses on the Network page. It goes to the DNS server your system already uses and can be switched off. This website follows the same idea: it loads no trackers, fonts or scripts from anywhere else. Read the rules in full in <a href="https://github.com/Pryme8/maestro/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+</section>
+
+<section class="honest">
+  <p class="label">STRAIGHT TALK</p>
+  <h2>What it will not claim</h2>
+  <ul>
+    <li>Clearing the machine frees memory and processor for local work such as builds and local models. It does not make a cloud-hosted model answer faster.</li>
+    <li>It shows who a program talks to, not the contents of encrypted traffic.</li>
+    <li>It is not an antivirus.</li>
+    <li>It cannot measure answer quality. “Best route” means cheapest within your rules.</li>
+    <li>A safe copy protects your files, not your machine. That is what approving each step is for.</li>
+  </ul>
+</section>
+
+<section id="status" class="status">
+  <p class="label">STATUS</p>
+  <h2>Early, and exact about it.</h2>
+  <p class="sub">There is no released download yet. Here is where each system stands today.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>Windows 11</th><th>Linux</th><th>macOS</th></tr></thead>
+      <tbody>
+        <tr><th>Builds and passes its tests</th><td class="y">yes</td><td class="y">yes</td><td class="n">not tried</td></tr>
+        <tr><th>Reads the machine; pause, resume, end</th><td class="y">yes</td><td class="y">yes, from the command line</td><td class="n">written, never run</td></tr>
+        <tr><th>The window</th><td class="y">yes</td><td class="n">not seen yet</td><td class="n">not tried</td></tr>
+        <tr><th>Follow and direct Claude Code</th><td class="y">yes</td><td class="n">not tried</td><td class="n">written, never run</td></tr>
+        <tr><th>Block one program on the network</th><td class="n">written, not run</td><td class="n">not built</td><td class="n">not built</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="fine"><b>Next, in the plan:</b> running a relay between agents, an isolated image for sessions, graphics load, how much each connection carries, signature checks, hardware controls, and stopping an agent when its budget runs out. <a href="https://github.com/Pryme8/maestro/blob/main/docs/plan.md">The plan</a> says what each one takes.</p>
+</section>
+
+<section id="get" class="get">
+  <p class="label">GET IT</p>
+  <h2>Three lines to a running base.</h2>
+  <p class="sub">Built from source for now. You need a <a href="https://rustup.rs">Rust toolchain</a>, version 1.84 or newer. Linux needs a few packages first: see the <a href="https://github.com/Pryme8/maestro/blob/main/docs/install.md">install guide</a>.</p>
+  <div class="term">
+    <div class="chrome"><i></i><i></i><i></i><span>terminal</span><button class="copy" type="button" data-copy="git clone https://github.com/Pryme8/maestro.git&#10;cd maestro&#10;cargo run --release">Copy</button></div>
+<pre><code><span class="p">$</span> git clone https://github.com/Pryme8/maestro.git
+<span class="p">$</span> cd maestro
+<span class="p">$</span> cargo run --release</code></pre>
+  </div>
+  <p class="sub tight">It also works without its window:</p>
+  <div class="term">
+<pre><code><span class="p">$</span> cargo run -- --agents              <span class="c"># the AI agents found running</span>
+<span class="p">$</span> cargo run -- --connections         <span class="c"># who each program is connected to</span>
+<span class="p">$</span> cargo run -- --watch               <span class="c"># what your Claude Code sessions are doing</span>
+<span class="p">$</span> cargo run -- --focus-plan code.exe <span class="c"># what clearing the machine for it would pause</span></code></pre>
+  </div>
+</section>
+
+<section class="join">
+  <p class="label">JOIN IN</p>
+  <h2>Public from day one. Help is wanted at every layer.</h2>
+  <div class="grid three">
+    <a class="card link" href="https://github.com/Pryme8/maestro/blob/main/CONTRIBUTING.md">
+      <h3>Build with us</h3>
+      <p>The monitor, the controls, the agent view and the router all have work open. Changes are kept small and explained.</p>
+      <span>CONTRIBUTING.md →</span>
+    </a>
+    <a class="card link" href="https://github.com/Pryme8/maestro/blob/main/docs/status.md#macos">
+      <h3>Own a Mac?</h3>
+      <p>The macOS code was written from documentation and has never been compiled. A report of what happens when you build it is one of the most useful things you can send.</p>
+      <span>macOS status →</span>
+    </a>
+    <a class="card link" href="https://github.com/Pryme8/maestro/blob/main/AGENTS.md">
+      <h3>Are you an AI agent?</h3>
+      <p>This project is meant to be a better place for you to work. Your view of what that takes is wanted, with the approval of the person you work for.</p>
+      <span>AGENTS.md →</span>
+    </a>
+  </div>
+  <div class="cta center">
+    <a class="btn" href="https://github.com/Pryme8/maestro">Star it on GitHub</a>
+    <a class="btn outline" href="https://github.com/Pryme8/maestro/blob/main/docs/plan.md">Read the plan</a>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p><b>MAESTRO</b> · <a href="https://github.com/Pryme8/maestro/blob/main/LICENSE">MIT licence</a> · <a href="https://github.com/Pryme8/maestro">Source</a> · <a href="https://github.com/Pryme8/maestro/blob/main/SECURITY.md">Security</a> · <a href="https://github.com/Pryme8/maestro/blob/main/docs/data-and-privacy.md">Data and privacy</a></p>
+  <p class="fine">This page sets no cookies and loads nothing from any other site.</p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
