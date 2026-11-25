@@ -130,12 +130,33 @@ fn run(mut command: Command) -> Result<String, String> {
         .filter(|line| !line.starts_with("wsl: Failed to translate"))
         .map(str::to_string)
         .collect();
-    let problem = problem.join("\n").trim().to_string();
-    Err(if problem.is_empty() { format!("{name} failed.") } else { problem })
+    let mut problem = problem.join("\n").trim().to_string();
+    // Git says some things, such as having nothing to commit, on its
+    // ordinary output, and a program that dies at start says nothing at all.
+    // Without these two a failure can read as a harmless warning.
+    let said = String::from_utf8_lossy(&out.stdout).replace('\0', "").trim().to_string();
+    if !said.is_empty() {
+        problem = format!("{problem}\n{said}").trim().to_string();
+    }
+    Err(format!("{problem}\n({name} ended with {})", out.status).trim().to_string())
+}
+
+/// A program to start. On Windows it is told not to open a console window,
+/// which it otherwise does whenever Maestro itself has none.
+fn program(name: &str) -> Command {
+    #[allow(unused_mut)]
+    let mut command = Command::new(name);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
 }
 
 fn wsl(args: &[&str]) -> Command {
-    let mut command = Command::new("wsl.exe");
+    let mut command = program("wsl.exe");
     // Without this, WSL's own messages come out as UTF-16.
     command.env("WSL_UTF8", "1").args(args);
     command
@@ -200,7 +221,7 @@ impl Environment {
     fn git(&self, dir: &str, args: &[&str]) -> Result<String, String> {
         let mut command = match self.image() {
             Some(distro) => wsl(&["-d", distro, "--exec", "git"]),
-            None => Command::new("git"),
+            None => program("git"),
         };
         command
             // Snapshots are commits, and a commit needs an author.
