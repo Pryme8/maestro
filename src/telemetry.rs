@@ -138,7 +138,11 @@ impl Sampler {
             #[cfg(windows)]
             core_times: wincpu::read(),
             #[cfg(windows)]
-            procs: crate::winproc::Reader::new(),
+            procs: {
+                let mut reader = crate::winproc::Reader::new();
+                reader.read(1.0, 1.0);
+                reader
+            },
             brand,
             cores,
             sys,

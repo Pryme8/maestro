@@ -83,6 +83,18 @@ extern "system" {
     fn CloseHandle(handle: *mut c_void) -> i32;
 }
 
+#[link(name = "ntdll")]
+extern "system" {
+    fn NtQueryInformationProcess(
+        process: *mut c_void,
+        class: u32,
+        info: *mut c_void,
+        len: u32,
+        returned: *mut u32,
+    ) -> i32;
+}
+
+const PROCESS_COMMAND_LINE_INFORMATION: u32 = 60;
 const SYSTEM_PROCESS_INFORMATION: u32 = 5;
 const STATUS_INFO_LENGTH_MISMATCH: i32 = 0xC000_0004_u32 as i32;
 const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
@@ -233,5 +245,48 @@ fn exe_path(pid: u32) -> Option<String> {
         let ok = QueryFullProcessImageNameW(handle, 0, buf.as_mut_ptr(), &mut size);
         CloseHandle(handle);
         (ok != 0).then(|| String::from_utf16_lossy(&buf[..size as usize]))
+    }
+}
+
+/// The command line a process was started with, where Windows allows it to
+/// be read. Used once per interpreter process to see what it is running.
+pub fn command_line(pid: u32) -> Option<String> {
+    if pid == 0 || pid == 4 {
+        return None;
+    }
+    // A command line is at most 32,767 characters; this leaves room for the header.
+    let mut buf = vec![0u64; 9 * 1024];
+    let len = buf.len() * 8;
+    // SAFETY: the buffer is valid for the length passed and the handle is
+    // closed before returning. The returned text pointer is checked to lie
+    // inside the buffer before it is read.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return None;
+        }
+        let mut returned = 0u32;
+        let status = NtQueryInformationProcess(
+            handle,
+            PROCESS_COMMAND_LINE_INFORMATION,
+            buf.as_mut_ptr().cast(),
+            len as u32,
+            &mut returned,
+        );
+        CloseHandle(handle);
+        if status < 0 {
+            return None;
+        }
+        let text: UnicodeString = std::ptr::read(buf.as_ptr().cast());
+        let base = buf.as_ptr() as usize;
+        let start = text.buffer as usize;
+        let bytes = text.length as usize;
+        if bytes == 0 || start < base || start + bytes > base + len {
+            return None;
+        }
+        Some(String::from_utf16_lossy(std::slice::from_raw_parts(
+            text.buffer,
+            bytes / 2,
+        )))
     }
 }

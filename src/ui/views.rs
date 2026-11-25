@@ -38,7 +38,7 @@ pub(super) struct Blob {
 impl App {
     pub(super) fn crew(&mut self, ui: &mut Ui, snap: &Snapshot, groups: &[Group<'_>]) {
         ui.horizontal(|ui| {
-            section_title(ui, "CREW", "everything running");
+            section_title(ui, "PROGRAMS", "everything running");
             ui.add_space(10.0);
             for (view, label) in [
                 (View::Tiles, "Tiles"),

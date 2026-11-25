@@ -8,7 +8,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Instant;
 
 /// How to reverse an action.
-enum Undo {
+pub(super) enum Undo {
     Resume(Vec<Paused>),
     Unblock(String),
     EnableAdapter(String),
@@ -52,7 +52,7 @@ struct Focus {
 }
 
 pub(super) struct State {
-    journal: Journal,
+    pub(super) journal: Journal,
     log: Vec<Entry>,
     /// Program waiting for a second click before it is ended.
     confirm_end: Option<String>,
@@ -105,7 +105,7 @@ impl State {
         }
     }
 
-    fn note(&mut self, text: String, ok: bool, undo: Option<Undo>) {
+    pub(super) fn note(&mut self, text: String, ok: bool, undo: Option<Undo>) {
         self.log.push(Entry {
             at: Instant::now(),
             text,

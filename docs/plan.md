@@ -1,6 +1,6 @@
 # Maestro: plan
 
-As of 2026-11-24. Phases 1 and 2 are running in a first form. Nothing after them is built.
+As of 2026-11-24. Phases 1, 2 and 3 are running in a first form. Nothing after them is built.
 
 ## Vision
 
@@ -58,6 +58,17 @@ Nothing here is off the table. Each hard part has a route, and the route has a c
 - **Removing files safely:** removing a file another program depends on can damage it, so removal is quarantine first, delete later.
 
 Each route has been researched, with what can be done now, what takes elevated rights or an opt-in component, and what takes a driver or hardware. See [research/blockers.md](research/blockers.md). That file is desk research: nothing in it has been tested on a machine yet, and it marks which sources were read in full.
+
+## The agent layer
+
+Built in phase 3, in a first form.
+
+- **Recogniser:** agents are found by program name and file location, and tools that run inside Node or Python by their command line. The command line is read once per process and not kept.
+- **Helpers:** every process an agent starts is counted with it, stopping at any other agent it launched.
+- **Telemetry receiver:** agents that export OpenTelemetry metrics report tokens and cost to a receiver on this computer only. It reads the JSON form, keeps the token and cost figures and discards the rest, including account and email fields. Any local program can send it figures, so they are treated as the agent's own claim.
+- **Budgets:** a daily dollar limit per agent. The energy bar shows what is left and passing it logs a warning. Pausing an agent automatically when its budget runs out is the next step and will be opt-in.
+- **Quests:** a named piece of work assigned to an agent, with what the agent reported spending since it started.
+- **What reporting needs:** an agent only shows spending if it reports it. Subscription plans report tokens but not a real bill, so cost there is the vendor's own estimate. This is the same limit the router's ledger works within.
 
 ## The router layer
 

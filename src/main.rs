@@ -1,8 +1,10 @@
 // Hide the extra console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod agents;
 mod classify;
 mod control;
+mod receiver;
 mod telemetry;
 mod ui;
 #[cfg(all(windows, target_pointer_width = "64"))]
@@ -22,6 +24,50 @@ fn main() -> eframe::Result<()> {
         if let Some(pid) = arg_after(&args, action).and_then(|v| v.parse::<u32>().ok()) {
             std::process::exit(command_line_action(action, pid));
         }
+    }
+    // `--agents` lists the AI agents found running. It changes nothing.
+    if args.iter().any(|a| a == "--agents") {
+        let mut sampler = telemetry::Sampler::new();
+        sleep(Duration::from_millis(500));
+        let snap = sampler.sample();
+        for agent in agents::Recogniser::default().find(&snap) {
+            println!(
+                "{} ({}, {}): {} running, {} processes, {} helpers, {:.1}% processor, {} MB",
+                agent.kind.label,
+                agent.kind.vendor,
+                agent.kind.what,
+                agent.sessions,
+                agent.procs.len(),
+                agent.helpers.len(),
+                agent.cpu,
+                agent.mem / 1_048_576
+            );
+        }
+        return Ok(());
+    }
+    // `--receive` runs only the usage receiver and prints the totals as reports arrive.
+    if args.iter().any(|a| a == "--receive") {
+        use std::sync::{Arc, Mutex};
+        let store = Arc::new(Mutex::new(receiver::Store::load()));
+        let (tx, rx) = std::sync::mpsc::channel();
+        if let Err(problem) = receiver::start(store.clone(), move || {
+            let _ = tx.send(());
+        }) {
+            eprintln!("{problem}");
+            std::process::exit(1);
+        }
+        println!("listening on 127.0.0.1:{}", receiver::PORT);
+        while rx.recv().is_ok() {
+            if let Ok(store) = store.lock() {
+                for (agent, t) in &store.today {
+                    println!(
+                        "{agent}: ${:.4} today, {} in, {} out, {} cache read, {} cache write",
+                        t.cost_usd, t.tokens_in, t.tokens_out, t.cache_read, t.cache_write
+                    );
+                }
+            }
+        }
+        return Ok(());
     }
     // `--focus-plan <program>` lists what clearing the machine would pause. It changes nothing.
     if let Some(task) = arg_after(&args, "--focus-plan") {

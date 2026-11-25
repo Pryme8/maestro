@@ -62,6 +62,26 @@ pub struct Journal {
     /// Programs never paused when clearing the machine.
     #[serde(default)]
     pub keep: Vec<String>,
+    /// Daily spending limit per agent, in US dollars, by agent id.
+    #[serde(default)]
+    pub budgets: HashMap<String, f64>,
+    #[serde(default)]
+    pub quests: Vec<Quest>,
+}
+
+/// A named piece of work, and what its agent reported spending on it.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Quest {
+    pub title: String,
+    /// Agent id, as in `agents::KINDS`.
+    pub agent: String,
+    /// The agent's lifetime totals when the quest started.
+    pub base_cost: f64,
+    pub base_tokens: f64,
+    /// Spent since then. Frozen when the quest is marked done.
+    pub cost: f64,
+    pub tokens: f64,
+    pub done: bool,
 }
 
 impl Journal {

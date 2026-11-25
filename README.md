@@ -2,7 +2,7 @@
 
 Maestro is a planned replacement for the resource manager and the everyday operating-system interfaces, built for a machine whose main job is running AI agents. It shows everything running on your PC, shuts down whatever the current task does not need, and gives you one visual, manageable place to direct the agents doing the work.
 
-**Status: phases 1 and 2 are running in a first form.** The app is a native Windows program that reads the machine, draws it, and can now act on it: pause, resume and end programs, clear the machine for a task, block a program on the network and switch an adapter off, each with a way back. This repo is public from day one so the design, the doubts and the decisions are all in the open.
+**Status: phases 1, 2 and 3 are running in a first form.** The app is a native Windows program that reads the machine, draws it, and can now act on it: pause, resume and end programs, clear the machine for a task, block a program on the network and switch an adapter off, each with a way back. This repo is public from day one so the design, the doubts and the decisions are all in the open.
 
 ## The vision
 
@@ -39,9 +39,16 @@ The full plan, including what each hard part takes, is in [docs/plan.md](docs/pl
   - **An action log** along the bottom with an Undo button on everything that can be undone, and Resume all.
 - **Guard rails:** processes critical to Windows and parts of Windows are locked and cannot be acted on. Everything Maestro pauses is written to disk, resumed when Maestro closes, and offered for resuming at the next start if Maestro crashed.
 
-Not there yet: graphics load, hostnames and locations for connections, signature checks, saved task profiles, and hardware controls. See the plan for the order.
+- **Agents as crew:**
+  - **Recognised by themselves.** Maestro finds Claude Code, the Claude app, Cursor, Codex, ChatGPT, Copilot, Gemini CLI, Aider, Windsurf, Ollama and LM Studio among the running processes, including tools that run inside Node or Python.
+  - **Helpers counted in.** The shells, tools and scripts an agent starts are counted with it, so you see what the agent is really using.
+  - **Usage reports.** Agents that can export OpenTelemetry metrics, such as Claude Code, can report tokens and cost to Maestro on port 4318. The app shows how to set that up. Maestro listens on this computer only and keeps only the token and cost figures.
+  - **Budgets and energy.** Give an agent a daily budget in dollars and its energy bar shows what is left. Passing the budget puts a warning in the action log.
+  - **Quests.** Name a piece of work, assign it to an agent, and see what the agent reported spending on it.
 
-What has been tested: pause, resume, end, the locks and resume-on-close were run against a throwaway process, and the planning and script-building logic has unit tests. The network block and adapter switch need Windows' permission prompt and have not been run yet. The buttons have been seen on screen but not clicked through by a person.
+Not there yet: graphics load, hostnames and locations for connections, signature checks, saved task profiles, hardware controls, and stopping an agent automatically when its budget runs out. See the plan for the order.
+
+What has been tested: pause, resume, end, the locks and resume-on-close were run against a throwaway process, and the planning and script-building logic has unit tests. The network block and adapter switch need Windows' permission prompt and have not been run yet. The buttons have been seen on screen but not clicked through by a person. The agent recogniser was run on a machine with Claude Code, the Claude app, Copilot and Ollama; the other agents' rules are untested. The usage receiver was tested with a sample report, not yet with a real agent.
 
 ## Build and run
 
@@ -58,6 +65,8 @@ Other ways to start it:
 - `cargo run -- --screenshot shot.png` opens the window, saves one picture of it and exits.
 - `cargo run --release -- --profile` times each part of a sample, to show what the monitor itself costs.
 - `cargo run -- --pause 1234`, `--resume 1234` and `--end 1234` act on one process by number, under the same locks as the buttons.
+- `cargo run -- --agents` lists the AI agents found running.
+- `cargo run -- --receive` runs only the usage receiver and prints totals as reports arrive.
 - `cargo run -- --focus-plan code.exe` lists what clearing the machine for that program would pause. It changes nothing.
 - `cargo test` runs the unit tests.
 

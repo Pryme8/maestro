@@ -3,6 +3,7 @@
 //! Phase 1 is read-only. Nothing in this file changes the machine.
 
 mod controls;
+mod crew;
 mod views;
 
 pub use views::View;
@@ -60,6 +61,8 @@ pub struct App {
     filter: String,
     /// Phase 2: what Maestro has changed, and the way back.
     ctl: controls::State,
+    /// Phase 3: the AI agents, what they report and what they may spend.
+    crew: crew::Crew,
     shot: Option<Shot>,
 }
 
@@ -112,6 +115,7 @@ impl App {
             mold: HashMap::new(),
             filter: String::new(),
             ctl: controls::State::load(),
+            crew: crew::Crew::start(&cc.egui_ctx),
             shot: screenshot.map(|path| Shot {
                 path,
                 requested: false,
@@ -182,6 +186,7 @@ impl eframe::App for App {
                 self.open_focus(task);
             }
         }
+        let found = self.crew.recogniser.find(&snap);
         hud(ctx, &snap, groups.len());
         self.action_log(ctx);
 
@@ -211,6 +216,8 @@ impl eframe::App for App {
                     if let Some(adapter) = rooms(ui, &snap) {
                         self.open_adapter(adapter);
                     }
+                    ui.add_space(4.0);
+                    self.crew_ui(ui, &found);
                     ui.add_space(14.0);
                     self.crew(ui, &snap, &groups);
                 });

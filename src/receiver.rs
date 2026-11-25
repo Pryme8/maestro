@@ -1,0 +1,368 @@
+//! Phase 3: receive usage numbers that agents report about themselves.
+//!
+//! Agents such as Claude Code can export OpenTelemetry metrics. This listens
+//! on this computer only, takes the token and cost figures, and discards
+//! everything else in the message, including account and email fields.
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
+use std::io::Read;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// The standard port for OpenTelemetry over HTTP.
+pub const PORT: u16 = 4318;
+const MAX_BODY: u64 = 8 * 1024 * 1024;
+
+#[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, PartialEq)]
+pub struct Totals {
+    pub cost_usd: f64,
+    pub tokens_in: f64,
+    pub tokens_out: f64,
+    pub cache_read: f64,
+    pub cache_write: f64,
+}
+
+impl Totals {
+    pub fn tokens(&self) -> f64 {
+        self.tokens_in + self.tokens_out + self.cache_read + self.cache_write
+    }
+}
+
+/// Everything agents have reported, by agent id.
+#[derive(Serialize, Deserialize, Default)]
+pub struct Store {
+    /// Days since 1970 in UTC that `today` covers.
+    day: u64,
+    pub today: HashMap<String, Totals>,
+    /// Never reset, so work tracked across midnight keeps adding up.
+    pub lifetime: HashMap<String, Totals>,
+    /// Last value of each cumulative series, to turn it into increases.
+    #[serde(skip)]
+    last_seen: HashMap<String, f64>,
+    /// When any agent last reported, in milliseconds since 1970.
+    #[serde(skip)]
+    pub last_report_ms: u64,
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+impl Store {
+    fn path() -> PathBuf {
+        let base = std::env::var_os("LOCALAPPDATA")
+            .or_else(|| std::env::var_os("XDG_STATE_HOME"))
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        base.join("Maestro").join("usage.json")
+    }
+
+    pub fn load() -> Self {
+        let mut store: Store = std::fs::read_to_string(Self::path())
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default();
+        store.roll_day();
+        store
+    }
+
+    fn save(&self) {
+        let path = Self::path();
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(text) = serde_json::to_string_pretty(self) {
+            let _ = std::fs::write(path, text);
+        }
+    }
+
+    /// Start a fresh "today" when the UTC day changes.
+    pub fn roll_day(&mut self) {
+        let day = now_ms() / 86_400_000;
+        if self.day != day {
+            self.day = day;
+            self.today.clear();
+        }
+    }
+
+    /// Take the usage figures out of one OpenTelemetry metrics message.
+    /// Returns how many figures were used.
+    pub fn ingest(&mut self, body: &Value) -> usize {
+        self.roll_day();
+        let used = self.apply(body);
+        if used > 0 {
+            self.last_report_ms = now_ms();
+            self.save();
+        }
+        used
+    }
+
+    /// Add one message's figures to the totals, without touching the disk.
+    fn apply(&mut self, body: &Value) -> usize {
+        let mut used = 0;
+        for resource in list(body, "resourceMetrics") {
+            let service = attribute(resource.get("resource"), "service.name");
+            for scope in list(resource, "scopeMetrics") {
+                for metric in list(scope, "metrics") {
+                    let Some(name) = metric.get("name").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    let Some(field) = Field::of(name) else { continue };
+                    let Some(sum) = metric.get("sum") else { continue };
+                    let agent = agent_id(service.as_deref(), name);
+                    let cumulative = is_cumulative(sum);
+                    for point in list(sum, "dataPoints") {
+                        let Some(value) = number(point) else { continue };
+                        let kind = attribute(Some(point), "type").unwrap_or_default();
+                        let increase = if cumulative {
+                            let key = format!("{agent}|{name}|{}", series_key(point));
+                            let last = self.last_seen.insert(key, value).unwrap_or(0.0);
+                            // A restart begins the count again from zero.
+                            if value >= last { value - last } else { value }
+                        } else {
+                            value
+                        };
+                        if increase <= 0.0 || !increase.is_finite() {
+                            continue;
+                        }
+                        for totals in [
+                            self.today.entry(agent.clone()).or_default(),
+                            self.lifetime.entry(agent.clone()).or_default(),
+                        ] {
+                            field.add(totals, &kind, increase);
+                        }
+                        used += 1;
+                    }
+                }
+            }
+        }
+        used
+    }
+}
+
+/// Which total a metric feeds.
+enum Field {
+    Cost,
+    Tokens,
+}
+
+impl Field {
+    fn of(metric: &str) -> Option<Self> {
+        if metric.ends_with("cost.usage") {
+            Some(Field::Cost)
+        } else if metric.ends_with("token.usage") {
+            Some(Field::Tokens)
+        } else {
+            None
+        }
+    }
+
+    fn add(&self, totals: &mut Totals, kind: &str, amount: f64) {
+        match self {
+            Field::Cost => totals.cost_usd += amount,
+            Field::Tokens => match kind {
+                "output" => totals.tokens_out += amount,
+                "cacheRead" => totals.cache_read += amount,
+                "cacheCreation" => totals.cache_write += amount,
+                _ => totals.tokens_in += amount,
+            },
+        }
+    }
+}
+
+/// The agent a metric belongs to: its service name when it gives one,
+/// otherwise the first part of the metric name.
+fn agent_id(service: Option<&str>, metric: &str) -> String {
+    let raw = match service {
+        Some(name) if !name.is_empty() && !name.starts_with("unknown_service") => name,
+        _ => metric.split('.').next().unwrap_or(metric),
+    };
+    raw.to_lowercase().replace('_', "-")
+}
+
+fn list<'a>(value: &'a Value, key: &str) -> impl Iterator<Item = &'a Value> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+}
+
+/// A string attribute from an object that has an `attributes` list.
+fn attribute(holder: Option<&Value>, key: &str) -> Option<String> {
+    list(holder?, "attributes")
+        .find(|a| a.get("key").and_then(Value::as_str) == Some(key))
+        .and_then(|a| a.get("value")?.get("stringValue")?.as_str())
+        .map(str::to_string)
+}
+
+/// A data point's value. Whole numbers may arrive as text.
+fn number(point: &Value) -> Option<f64> {
+    if let Some(v) = point.get("asDouble") {
+        return v.as_f64();
+    }
+    let v = point.get("asInt")?;
+    v.as_f64().or_else(|| v.as_str()?.parse().ok())
+}
+
+fn is_cumulative(sum: &Value) -> bool {
+    match sum.get("aggregationTemporality") {
+        Some(Value::Number(n)) => n.as_u64() == Some(2),
+        Some(Value::String(s)) => s.ends_with("CUMULATIVE"),
+        _ => false,
+    }
+}
+
+/// Identifies one series: its attributes and when it started counting.
+fn series_key(point: &Value) -> String {
+    let mut parts: Vec<String> = list(point, "attributes").map(Value::to_string).collect();
+    parts.sort_unstable();
+    let start = point
+        .get("startTimeUnixNano")
+        .map(Value::to_string)
+        .unwrap_or_default();
+    format!("{}|{start}", parts.join(","))
+}
+
+/// Listen for reports on this computer only. `on_report` runs after each one
+/// that carried usage figures. Returns an explanation if the port is taken.
+pub fn start(
+    store: Arc<Mutex<Store>>,
+    on_report: impl Fn() + Send + 'static,
+) -> Result<(), String> {
+    let server = tiny_http::Server::http(("127.0.0.1", PORT)).map_err(|e| {
+        format!("Could not listen on port {PORT}: {e}. Another telemetry collector may be using it.")
+    })?;
+    std::thread::spawn(move || {
+        for mut request in server.incoming_requests() {
+            let (code, body) = handle(&mut request, &store);
+            if code == 200 && body == OK_USED {
+                on_report();
+            }
+            let response = tiny_http::Response::from_string("{}")
+                .with_status_code(code)
+                .with_header(
+                    tiny_http::Header::from_bytes("Content-Type", "application/json")
+                        .expect("static header is valid"),
+                );
+            let _ = request.respond(response);
+        }
+    });
+    Ok(())
+}
+
+const OK_USED: &str = "used";
+const OK_IGNORED: &str = "ignored";
+
+fn handle(request: &mut tiny_http::Request, store: &Arc<Mutex<Store>>) -> (u16, &'static str) {
+    if *request.method() != tiny_http::Method::Post {
+        return (405, "");
+    }
+    let path = request.url().split('?').next().unwrap_or("").to_string();
+    // Logs and traces are accepted and dropped so agents do not report errors.
+    if path == "/v1/logs" || path == "/v1/traces" {
+        return (200, OK_IGNORED);
+    }
+    if path != "/v1/metrics" {
+        return (404, "");
+    }
+    let is_json = request.headers().iter().any(|h| {
+        h.field.equiv("Content-Type") && h.value.as_str().to_lowercase().contains("json")
+    });
+    if !is_json {
+        // Only the JSON form is read. The agent must be set to `http/json`.
+        return (415, "");
+    }
+    let mut text = String::new();
+    if request
+        .as_reader()
+        .take(MAX_BODY)
+        .read_to_string(&mut text)
+        .is_err()
+    {
+        return (400, "");
+    }
+    let Ok(body) = serde_json::from_str::<Value>(&text) else {
+        return (400, "");
+    };
+    let Ok(mut store) = store.lock() else {
+        return (500, "");
+    };
+    if store.ingest(&body) > 0 {
+        (200, OK_USED)
+    } else {
+        (200, OK_IGNORED)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn message(temporality: u64, cost: f64, input: &str, output: &str) -> Value {
+        json!({ "resourceMetrics": [{
+            "resource": { "attributes": [
+                { "key": "service.name", "value": { "stringValue": "claude-code" } },
+                { "key": "user.email", "value": { "stringValue": "someone@example.com" } }
+            ]},
+            "scopeMetrics": [{ "metrics": [
+                { "name": "claude_code.cost.usage", "unit": "USD", "sum": {
+                    "aggregationTemporality": temporality,
+                    "dataPoints": [{ "asDouble": cost, "startTimeUnixNano": "1",
+                        "attributes": [{ "key": "model", "value": { "stringValue": "m" } }] }] } },
+                { "name": "claude_code.token.usage", "unit": "tokens", "sum": {
+                    "aggregationTemporality": temporality,
+                    "dataPoints": [
+                        { "asInt": input, "startTimeUnixNano": "1",
+                          "attributes": [{ "key": "type", "value": { "stringValue": "input" } }] },
+                        { "asInt": output, "startTimeUnixNano": "1",
+                          "attributes": [{ "key": "type", "value": { "stringValue": "output" } }] }
+                    ] } },
+                { "name": "claude_code.session.count", "sum": { "dataPoints": [{ "asInt": "1" }] } }
+            ]}]
+        }]})
+    }
+
+    fn store() -> Store {
+        let mut store = Store::default();
+        store.roll_day();
+        store
+    }
+
+    #[test]
+    fn delta_reports_add_up() {
+        let mut store = store();
+        store.apply(&message(1, 0.25, "1000", "200"));
+        store.apply(&message(1, 0.5, "500", "100"));
+        let totals = store.today["claude-code"];
+        assert_eq!(totals.cost_usd, 0.75);
+        assert_eq!(totals.tokens_in, 1500.0);
+        assert_eq!(totals.tokens_out, 300.0);
+        assert_eq!(store.lifetime["claude-code"], totals);
+    }
+
+    #[test]
+    fn cumulative_reports_count_only_the_increase() {
+        let mut store = store();
+        store.apply(&message(2, 1.0, "1000", "100"));
+        store.apply(&message(2, 1.5, "1800", "100"));
+        let totals = store.today["claude-code"];
+        assert_eq!(totals.cost_usd, 1.5);
+        assert_eq!(totals.tokens_in, 1800.0);
+        assert_eq!(totals.tokens_out, 100.0);
+    }
+
+    #[test]
+    fn the_agent_is_named_from_the_metric_when_no_service_is_given() {
+        assert_eq!(agent_id(None, "claude_code.cost.usage"), "claude-code");
+        assert_eq!(agent_id(Some("unknown_service:node"), "codex.token.usage"), "codex");
+        assert_eq!(agent_id(Some("Claude_Code"), "x.cost.usage"), "claude-code");
+    }
+}
