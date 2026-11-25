@@ -37,7 +37,7 @@ mod tests {
 
     /// Files that may hold `unsafe` code: the hand-written calls into the
     /// operating system.
-    const UNSAFE: &[&str] = &["control.rs", "main.rs", "netmap.rs", "stale.rs", "telemetry.rs", "winproc.rs"];
+    const UNSAFE: &[&str] = &["control.rs", "gpu.rs", "main.rs", "netmap.rs", "stale.rs", "telemetry.rs", "winproc.rs"];
 
     /// Every use of the network, by file and the call that makes it.
     const NETWORK: &[(&str, &str, &str)] = &[

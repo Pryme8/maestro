@@ -337,6 +337,7 @@ mod tests {
             networks: Vec::new(),
             processes,
             connections: Vec::new(),
+            gpu: Default::default(),
         })
     }
 

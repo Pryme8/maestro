@@ -23,6 +23,8 @@ pub struct Snapshot {
     pub networks: Vec<Net>,
     pub processes: Vec<Proc>,
     pub connections: Vec<Conn>,
+    /// Graphics cards and what each process uses of them.
+    pub gpu: crate::gpu::Gpu,
 }
 
 #[derive(Serialize)]
@@ -114,6 +116,7 @@ pub struct Sampler {
     sys: System,
     disks: Disks,
     networks: Networks,
+    gpu: crate::gpu::Reader,
     last: Instant,
 }
 
@@ -148,6 +151,7 @@ impl Sampler {
             sys,
             disks: Disks::new_with_refreshed_list(),
             networks: Networks::new_with_refreshed_list(),
+            gpu: crate::gpu::Reader::new(),
             last: Instant::now(),
         }
     }
@@ -180,6 +184,9 @@ impl Sampler {
         timed("networks", &mut out, || self.networks.refresh(true));
         timed("sockets", &mut out, || {
             connections();
+        });
+        timed("graphics", &mut out, || {
+            self.gpu.read();
         });
         timed("whole sample", &mut out, || {
             self.sample();
@@ -307,6 +314,7 @@ impl Sampler {
             networks,
             processes,
             connections: connections(),
+            gpu: self.gpu.read(),
         }
     }
 }

@@ -25,6 +25,7 @@ mod agents;
 mod classify;
 mod control;
 mod environment;
+mod gpu;
 mod guard;
 mod history;
 mod live;
@@ -151,6 +152,12 @@ fn main() -> eframe::Result<()> {
             "{}",
             serde_json::to_string_pretty(&snap).expect("snapshot serialises")
         );
+        return Ok(());
+    }
+
+    // `--gpu` prints each graphics card and the programs using it.
+    if args.iter().any(|a| a == "--gpu") {
+        gpu::print();
         return Ok(());
     }
 

@@ -566,6 +566,7 @@ mod tests {
             networks: Vec::new(),
             processes: vec![proc(10, "browser"), proc(11, "browser"), proc(20, "server")],
             connections,
+            gpu: Default::default(),
         }
     }
 

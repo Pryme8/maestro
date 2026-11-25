@@ -55,6 +55,7 @@ impl App {
                         .desired_width(160.0),
                 );
                 ui.selectable_value(&mut self.sort, Sort::Sockets, "Sockets");
+                ui.selectable_value(&mut self.sort, Sort::Gpu, "Graphics");
                 ui.selectable_value(&mut self.sort, Sort::Memory, "Memory");
                 ui.selectable_value(&mut self.sort, Sort::Cpu, "CPU");
                 ui.label(RichText::new("Sort by").color(DIM));

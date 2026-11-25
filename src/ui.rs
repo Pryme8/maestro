@@ -46,6 +46,7 @@ const ROOM_HEIGHT: f32 = 118.0;
 enum Sort {
     Cpu,
     Memory,
+    Gpu,
     Sockets,
 }
 
@@ -125,6 +126,9 @@ struct Group<'a> {
     procs: Vec<&'a Proc>,
     cpu: f32,
     mem: u64,
+    /// Graphics load, and memory on the card.
+    gpu: f32,
+    gpu_mem: u64,
     sockets: usize,
     /// True when Maestro has paused any of its processes.
     paused: bool,
@@ -336,6 +340,9 @@ impl eframe::App for App {
         match self.sort {
             Sort::Cpu => groups.sort_by(|a, b| b.cpu.total_cmp(&a.cpu)),
             Sort::Memory => groups.sort_by(|a, b| b.mem.cmp(&a.mem)),
+            Sort::Gpu => groups.sort_by(|a, b| {
+                (b.gpu, b.gpu_mem).partial_cmp(&(a.gpu, a.gpu_mem)).unwrap_or(std::cmp::Ordering::Equal)
+            }),
             Sort::Sockets => groups.sort_by(|a, b| b.sockets.cmp(&a.sockets)),
         }
 
@@ -577,12 +584,63 @@ fn rooms(ui: &mut Ui, snap: &Snapshot) -> Option<String> {
         }),
 
         ("FORGE", "graphics", &|ui: &mut Ui| {
-            ui.label(RichText::new("Not read yet").color(DIM).size(18.0));
-            ui.label(
-                RichText::new("Graphics load and memory are not part of this build.")
+            let gpu = &snap.gpu;
+            let Some(card) = gpu.busiest() else {
+                let (head, why) = match gpu.read {
+                    true => ("No card found", "The system reports no graphics card with readable load or memory."),
+                    false => ("Not read yet", "Graphics load and memory are not read on this system yet."),
+                };
+                ui.label(RichText::new(head).color(DIM).size(18.0));
+                ui.label(RichText::new(why).color(DIM).size(11.0));
+                return;
+            };
+            big_number(ui, &format!("{:.0}%", card.load_percent));
+            ui.label(RichText::new(clip(&card.name, 30)).color(DIM).size(11.0))
+                .on_hover_text("The load is that of the busiest part of the card, as Task Manager shows it.");
+            if card.dedicated_total_bytes > 0 {
+                let frac = ratio(card.dedicated_used_bytes, card.dedicated_total_bytes);
+                ui.label(
+                    RichText::new(format!(
+                        "{} of {} on the card",
+                        bytes(card.dedicated_used_bytes),
+                        bytes(card.dedicated_total_bytes)
+                    ))
                     .color(DIM)
                     .size(11.0),
-            );
+                );
+                bar(ui, frac, heat(frac * 100.0));
+            } else {
+                ui.label(
+                    RichText::new(format!("{} on the card", bytes(card.dedicated_used_bytes)))
+                        .color(DIM)
+                        .size(11.0),
+                );
+            }
+            if gpu.adapters.len() > 1 {
+                ui.label(
+                    RichText::new(format!("busiest of {} cards", gpu.adapters.len()))
+                        .color(DIM)
+                        .size(11.0),
+                );
+            }
+            // The programs leaning on it hardest, by name.
+            let mut by_name: HashMap<&str, (f32, u64)> = HashMap::new();
+            for p in &snap.processes {
+                let g = gpu.of(p.pid);
+                if g.load_percent >= 0.5 || g.dedicated_bytes > 0 {
+                    let entry = by_name.entry(p.name.as_str()).or_default();
+                    entry.0 = (entry.0 + g.load_percent).min(100.0);
+                    entry.1 += g.dedicated_bytes;
+                }
+            }
+            let mut top: Vec<_> = by_name.into_iter().collect();
+            top.sort_by(|a, b| (b.1 .0, b.1 .1).partial_cmp(&(a.1 .0, a.1 .1)).unwrap_or(std::cmp::Ordering::Equal));
+            ui.add_space(4.0);
+            for (name, (load, mem)) in top.iter().take(3) {
+                ui.label(
+                    RichText::new(format!("{}  {:.0}%, {}", clip(name, 18), load, bytes(*mem))).size(11.0),
+                );
+            }
         }),
     ];
 
@@ -751,11 +809,12 @@ fn detail(
     });
     ui.label(
         RichText::new(format!(
-            "{} running  ·  {:.1}% processor  ·  {} memory  ·  {} sockets",
+            "{} running  ·  {:.1}% processor  ·  {} memory  ·  {} sockets{}",
             group.procs.len(),
             group.cpu,
             bytes(group.mem),
-            group.sockets
+            group.sockets,
+            graphics_note(group)
         ))
         .color(DIM)
         .size(11.0),
@@ -812,7 +871,7 @@ fn detail(
                 .striped(true)
                 .spacing(vec2(14.0, 4.0))
                 .show(ui, |ui| {
-                    for head in ["PID", "CPU", "Memory", "Disk write", "Started by"] {
+                    for head in ["PID", "CPU", "Memory", "Graphics", "On the card", "Disk write", "Started by"] {
                         ui.label(RichText::new(head).color(DIM).size(11.0));
                     }
                     ui.end_row();
@@ -820,6 +879,16 @@ fn detail(
                         ui.label(RichText::new(p.pid.to_string()).monospace().size(11.0));
                         ui.label(RichText::new(format!("{:.1}%", p.cpu_percent)).size(11.0));
                         ui.label(RichText::new(bytes(p.memory_bytes)).size(11.0));
+                        let g = snap.gpu.of(p.pid);
+                        ui.label(RichText::new(format!("{:.1}%", g.load_percent)).size(11.0));
+                        if g.overstated {
+                            ui.label(RichText::new("not known").color(DIM).size(11.0)).on_hover_text(
+                                "The system reported more for this process than the whole card has in use, \
+                                 so the figure is left out.",
+                            );
+                        } else {
+                            ui.label(RichText::new(bytes(g.dedicated_bytes)).size(11.0));
+                        }
                         ui.label(RichText::new(rate(p.disk_write_bytes_per_sec)).size(11.0));
                         let parent = p
                             .parent_pid
@@ -898,6 +967,8 @@ fn group_processes<'a>(
             procs: Vec::new(),
             cpu: 0.0,
             mem: 0,
+            gpu: 0.0,
+            gpu_mem: 0,
             sockets: 0,
             paused: false,
             class: Class::App,
@@ -905,6 +976,9 @@ fn group_processes<'a>(
         });
         group.cpu += p.cpu_percent;
         group.mem += p.memory_bytes;
+        let g = snap.gpu.of(p.pid);
+        group.gpu = (group.gpu + g.load_percent).min(100.0);
+        group.gpu_mem += g.dedicated_bytes;
         group.sockets += sockets.get(&p.pid).copied().unwrap_or(0);
         group.class = group
             .class
@@ -937,15 +1011,25 @@ fn class_colour(class: Class) -> Color32 {
 
 fn summary(group: &Group<'_>) -> String {
     format!(
-        "{}\n{}{}\n{} running, {:.1}% processor, {} memory, {} sockets",
+        "{}\n{}{}\n{} running, {:.1}% processor, {} memory, {} sockets{}",
         group.name,
         group.class.label(),
         group.stale.map(|s| format!("\n{}", s.explain())).unwrap_or_default(),
         group.procs.len(),
         group.cpu,
         bytes(group.mem),
-        group.sockets
+        group.sockets,
+        graphics_note(group)
     )
+}
+
+/// A program's graphics use, for the end of a summary line. Empty when it has none.
+fn graphics_note(group: &Group<'_>) -> String {
+    if group.gpu < 0.05 && group.gpu_mem == 0 {
+        return String::new();
+    }
+    let sep = if group.gpu_mem > 0 { format!(", {} on the card", bytes(group.gpu_mem)) } else { String::new() };
+    format!("  ·  {:.0}% graphics{sep}", group.gpu)
 }
 
 /// Teal when idle, amber when busy, red when saturated.
