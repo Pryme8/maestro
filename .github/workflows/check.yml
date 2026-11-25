@@ -1,0 +1,75 @@
+# Runs on every pull request and every push to main.
+#
+# A pull request from a stranger's fork runs here with a read-only token and
+# no secrets, so nothing in it can change the repository or publish anything.
+# Do not change the trigger to pull_request_target. See SECURITY.md.
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Mondays, so a newly reported flaw in a crate is seen without a push.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests and guard rails (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install Linux build packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
+
+      # --locked fails if Cargo.lock would change, so no crate version can
+      # slip in that is not written in the pull request.
+      - name: Guard rails
+        run: cargo test --locked guard
+
+      - name: All tests
+        run: cargo test --locked
+
+  crates:
+    name: Crates with known flaws
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Cargo.lock
+        run: cargo audit
+
+  new-crates:
+    name: Crates this pull request adds
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+        with:
+          fail-on-severity: low

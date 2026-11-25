@@ -30,6 +30,10 @@ See [docs/install.md](docs/install.md) for what each system needs first. Set `MA
 
 Before sharing a screenshot of Maestro, check it: it shows the programs you run, the hosts they talk to and, on the Live page, the contents of agent sessions.
 
+## Security
+
+Maestro runs with the user's rights and sits beside their sign-ins, so some changes get a harder look. `cargo test` includes guard tests that fail when a change starts a new program, runs a line of text as a command, uses the network, adds `unsafe` code or adds a crate. A failure is not a refusal: say why the change needs it, update the list in `src/guard.rs`, and a maintainer will review it. [SECURITY.md](SECURITY.md) has the rules and how to report a problem privately.
+
 ## AI-written contributions
 
 Contributions written by or with an AI agent are welcome. Say so in the issue or pull request and name the agent. See [AGENTS.md](AGENTS.md).

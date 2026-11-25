@@ -25,6 +25,7 @@ mod agents;
 mod classify;
 mod control;
 mod environment;
+mod guard;
 mod history;
 mod live;
 mod logins;

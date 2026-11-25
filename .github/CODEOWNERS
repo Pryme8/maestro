@@ -1,0 +1,11 @@
+# A change to any of these needs a review from the person named.
+# They are the files that decide what Maestro may do on a user's machine
+# and what code is built into it. See SECURITY.md.
+
+/src/guard.rs        @Pryme8
+/.github/            @Pryme8
+/Cargo.toml          @Pryme8
+/Cargo.lock          @Pryme8
+/scripts/            @Pryme8
+/SECURITY.md         @Pryme8
+/AGENTS.md           @Pryme8

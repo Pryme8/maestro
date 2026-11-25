@@ -1,0 +1,14 @@
+# Opens a pull request when a crate or an action has a newer version.
+# Each one goes through the same checks and review as any other change.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
