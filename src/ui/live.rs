@@ -21,6 +21,8 @@ pub(super) struct LiveUi {
     works: Vec<(String, String)>,
     /// Draw the selected session as a map instead of a list.
     as_map: bool,
+    /// Bring the map into view. Used when taking pictures of the pages.
+    pub(super) show_map: bool,
     /// Each agent tool and whether it can be used.
     services: Arc<Mutex<Vec<Service>>>,
     checking: Arc<AtomicBool>,
@@ -52,6 +54,7 @@ impl LiveUi {
             problem: None,
             works,
             as_map: true,
+            show_map: false,
             services: Arc::default(),
             checking: Arc::default(),
         };
@@ -142,7 +145,7 @@ impl App {
         // Start a run.
         egui::CollapsingHeader::new(RichText::new("Start a session from here").size(13.0))
             .id_salt("live-start")
-            .default_open(lv.runs.is_empty())
+            .default_open(false)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Folder").color(DIM).size(11.0));
@@ -369,7 +372,7 @@ impl App {
             });
         let busy = now.saturating_sub(session.last_ms) < 15_000;
         let list_height = if lv.as_map {
-            session_map(ui, now, &session.name(), busy, &live::map(session));
+            session_map(ui, now, &session.name(), busy, &live::map(session), lv.show_map);
             ui.add_space(4.0);
             150.0
         } else {
@@ -413,10 +416,13 @@ const MAP_LEAVES: usize = 6;
 /// The session as a map: the agent in the middle, each tool it has used
 /// around it, and what each tool was pointed at on the outside. Whatever was
 /// used most recently is brightest.
-fn session_map(ui: &mut Ui, now: u64, title: &str, busy: bool, branches: &[live::Branch]) {
+fn session_map(ui: &mut Ui, now: u64, title: &str, busy: bool, branches: &[live::Branch], scroll_to: bool) {
     use std::f32::consts::{FRAC_PI_2, TAU};
     let size = vec2(ui.available_width(), 470.0);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    if scroll_to {
+        ui.scroll_to_rect(rect, Some(Align::TOP));
+    }
     let painter = ui.painter().with_clip_rect(rect);
     painter.rect_filled(rect, CornerRadius::same(6), PANEL);
     let centre = rect.center();
@@ -564,7 +570,7 @@ fn session_map(ui: &mut Ui, now: u64, title: &str, busy: bool, branches: &[live:
 fn state_colour(state: services::State) -> Color32 {
     match state {
         services::State::Ready => TEAL,
-        services::State::SignIn | services::State::Stopped => AMBER,
+        services::State::SignIn | services::State::Stopped | services::State::AgentMissing => AMBER,
         services::State::Missing => DIM,
         services::State::Unknown => RED,
     }
@@ -592,7 +598,7 @@ impl LiveUi {
         let list = self.services.lock().ok()?;
         let claude = list.iter().find(|s| s.id == "claude-code")?;
         (claude.state != services::State::Ready)
-            .then(|| format!("Claude Code is {}. See Services above.", claude.state.label()))
+            .then(|| format!("Claude Code: {}. See Services above.", claude.state.label()))
     }
 
     /// Each tool, whether it can be used, how that was checked and what to do.
@@ -622,15 +628,28 @@ impl LiveUi {
                 });
                 let Ok(list) = self.services.lock() else { return };
                 for s in list.iter() {
-                    ui.add_space(4.0);
+                    // One line each; the detail opens for what needs you.
+                    let needs_you = s.reach == services::Reach::Direct && s.state != services::State::Ready;
+                    let reach = match s.reach {
+                        services::Reach::Direct => "Maestro can follow and direct it",
+                        services::Reach::SeenOnly => "Maestro can only see it running",
+                    };
+                    let mut title = egui::text::LayoutJob::default();
+                    let part = |text: &str, colour: Color32, size: f32| {
+                        (text.to_string(), egui::TextFormat { color: colour, font_id: FontId::proportional(size), ..Default::default() })
+                    };
+                    for (text, format) in [
+                        part(s.name, TEXT, 12.5),
+                        part(&format!("   {}", s.state.label()), state_colour(s.state), 12.0),
+                        part(&format!("   {reach}"), DIM, 11.0),
+                    ] {
+                        title.append(&text, 0.0, format);
+                    }
+                    egui::CollapsingHeader::new(title)
+                        .id_salt(("service", s.id))
+                        .default_open(needs_you)
+                        .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new(s.name).strong().size(12.0));
-                        ui.label(RichText::new(s.state.label()).color(state_colour(s.state)).size(12.0));
-                        let reach = match s.reach {
-                            services::Reach::Direct => "Maestro can follow and direct it",
-                            services::Reach::SeenOnly => "Maestro can only see it running",
-                        };
-                        ui.label(RichText::new(reach).color(DIM).size(11.0));
                         if let Some(command) = s.sign_in {
                             if ui
                                 .button("Sign in…")
@@ -645,9 +664,10 @@ impl LiveUi {
                     });
                     ui.label(RichText::new(&s.found).size(11.0));
                     for step in &s.fix {
-                        ui.label(RichText::new(format!("→ {step}")).color(AMBER).size(11.0));
+                        ui.label(RichText::new(format!("- {step}")).color(AMBER).size(11.0));
                     }
                     ui.label(RichText::new(format!("How this was checked: {}", s.how)).color(DIM).size(10.0));
+                        });
                 }
             });
         if let Some(command) = sign_in {

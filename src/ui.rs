@@ -54,6 +54,20 @@ struct Shot {
     requested: bool,
 }
 
+/// A picture of each page in turn, from one window.
+struct Tour {
+    dir: PathBuf,
+    at: usize,
+    since: std::time::Instant,
+    requested: bool,
+}
+
+const TOUR: [(Page, &str); 3] = [
+    (Page::Base, "base"),
+    (Page::Live, "live"),
+    (Page::Live, "live-map"),
+];
+
 /// Counts the window knows and the sampling thread writes into the history.
 #[derive(Default)]
 struct Live {
@@ -102,6 +116,7 @@ pub struct App {
     /// Show only programs flagged as not responding or cold.
     only_stale: bool,
     shot: Option<Shot>,
+    tour: Option<Tour>,
 }
 
 /// Processes that share a name, shown as one crew tile.
@@ -123,6 +138,7 @@ impl App {
     pub fn new(
         cc: &eframe::CreationContext<'_>,
         screenshot: Option<PathBuf>,
+        tour: Option<PathBuf>,
         view: View,
         page: Page,
         select: Option<String>,
@@ -203,7 +219,56 @@ impl App {
                 path,
                 requested: false,
             }),
+            tour: tour.map(|dir| Tour {
+                dir,
+                at: 0,
+                since: std::time::Instant::now(),
+                requested: false,
+            }),
         }
+    }
+
+    /// Tour mode: show each page for a few seconds, save a picture of it,
+    /// then close.
+    fn handle_tour(&mut self, ctx: &egui::Context) {
+        let Some(tour) = &mut self.tour else { return };
+        if self.samples < 2 {
+            tour.since = std::time::Instant::now();
+            return;
+        }
+        let (page, name) = TOUR[tour.at];
+        self.page = page;
+        self.lv.show_map = name == "live-map";
+        // Long enough for names to be looked up and session files to be read.
+        if !tour.requested && tour.since.elapsed() > Duration::from_secs(6) {
+            tour.requested = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+        }
+        let image = ctx.input(|i| {
+            i.raw.events.iter().find_map(|e| match e {
+                egui::Event::Screenshot { image, .. } => Some(image.clone()),
+                _ => None,
+            })
+        });
+        if let Some(image) = image {
+            let [w, h] = image.size;
+            let _ = std::fs::create_dir_all(&tour.dir);
+            let path = tour.dir.join(format!("{name}.png"));
+            if let Err(err) =
+                image::save_buffer(&path, image.as_raw(), w as u32, h as u32, image::ColorType::Rgba8)
+            {
+                eprintln!("could not save {}: {err}", path.display());
+            }
+            tour.at += 1;
+            tour.requested = false;
+            tour.since = std::time::Instant::now();
+            if tour.at == TOUR.len() {
+                self.tour = None;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                return;
+            }
+        }
+        ctx.request_repaint_after(Duration::from_millis(200));
     }
 
     /// Screenshot mode: wait for a few samples, save one picture, then close.
@@ -242,6 +307,7 @@ impl eframe::App for App {
             self.samples += 1;
         }
         self.handle_screenshot(ctx);
+        self.handle_tour(ctx);
 
         let Some(snap) = self.snap.take() else {
             egui::CentralPanel::default().show(ctx, |ui| {

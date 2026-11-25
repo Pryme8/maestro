@@ -167,6 +167,10 @@ fn main() -> eframe::Result<()> {
         .and_then(|i| args.get(i + 1))
         .map(PathBuf::from);
 
+    // `--tour <folder>` opens the window once, saves a picture of each page
+    // into the folder and exits.
+    let tour = arg_after(&args, "--tour").map(PathBuf::from);
+
     // `--view tiles|heat|tree|mold` picks the view the window opens on.
     let view = args
         .iter()
@@ -199,7 +203,7 @@ fn main() -> eframe::Result<()> {
             viewport,
             ..Default::default()
         },
-        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, view, page, select, preview_focus)))),
+        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, tour, view, page, select, preview_focus)))),
     )
 }
 

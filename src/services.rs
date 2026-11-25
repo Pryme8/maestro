@@ -18,6 +18,8 @@ pub enum State {
     Missing,
     /// Installed and not running.
     Stopped,
+    /// The app is installed, but not the part another program can start.
+    AgentMissing,
     /// The check itself did not work.
     Unknown,
 }
@@ -29,6 +31,7 @@ impl State {
             State::SignIn => "needs sign-in",
             State::Missing => "not installed",
             State::Stopped => "not running",
+            State::AgentMissing => "editor only",
             State::Unknown => "could not check",
         }
     }
@@ -257,12 +260,59 @@ fn ollama() -> Service {
     }
 }
 
+/// Where the Cursor editor is installed, if it is. The editor is a separate
+/// thing from Cursor's command-line agent, and only the agent can be started
+/// by another program.
+fn cursor_editor() -> Option<PathBuf> {
+    let mut places: Vec<PathBuf> = Vec::new();
+    for (var, tail) in [("ProgramFiles", "cursor"), ("LOCALAPPDATA", "Programs/cursor")] {
+        if let Some(base) = std::env::var_os(var) {
+            places.push(PathBuf::from(base).join(tail));
+        }
+    }
+    places.push(PathBuf::from("/Applications/Cursor.app"));
+    places.push(PathBuf::from("/opt/Cursor"));
+    places
+        .into_iter()
+        .find(|p| p.is_dir())
+        .or_else(|| find("cursor"))
+}
+
+/// Cursor: the editor and its command-line agent are reported separately.
+fn cursor() -> Service {
+    let mut service = seen_only("cursor", "Cursor", &["agent", "cursor-agent"], "CURSOR_API_KEY");
+    let agent_missing = service.state == State::Missing;
+    match (cursor_editor(), agent_missing) {
+        (Some(editor), true) => {
+            service.state = State::AgentMissing;
+            service.found = format!(
+                "The Cursor editor is installed at {}. Its command-line agent (`agent`) was not found on the path.",
+                editor.display()
+            );
+            service.fix.insert(
+                0,
+                "The editor's window cannot be driven by another program; only the command-line agent can. \
+                 Install it from Cursor's site if you want Maestro to start Cursor runs once that is built."
+                    .to_string(),
+            );
+        }
+        (Some(editor), false) => {
+            service.found.push_str(&format!(" The Cursor editor is installed at {}.", editor.display()));
+        }
+        (None, _) => {}
+    }
+    service.how = "Looked for the Cursor editor in the usual install folders, for `agent` or `cursor-agent` \
+                   on the path, and checked whether CURSOR_API_KEY is set (not what it holds)."
+        .to_string();
+    service
+}
+
 /// Check every tool Maestro knows. Takes a second or two; run it off the window's thread.
 pub fn check() -> Vec<Service> {
     vec![
         claude(),
         seen_only("codex", "Codex", &["codex"], "OPENAI_API_KEY"),
-        seen_only("cursor", "Cursor's command-line agent", &["agent", "cursor-agent"], "CURSOR_API_KEY"),
+        cursor(),
         seen_only("gemini", "Gemini CLI", &["gemini"], "GEMINI_API_KEY"),
         ollama(),
     ]

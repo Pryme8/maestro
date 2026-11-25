@@ -204,6 +204,9 @@ pub fn map(snap: &Snapshot) -> Map {
         .map(|p| (p.pid, p.name.as_str()))
         .collect();
     let program = |pid: Option<u32>| match pid {
+        // The system files connections under process 0 once their owner has
+        // let go of them and they are winding down.
+        Some(0) => "closing, no owner any more".to_string(),
         Some(pid) => match names.get(&pid) {
             Some(name) => name.to_string(),
             None => format!("process {pid}, not listed"),
