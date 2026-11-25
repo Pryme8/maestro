@@ -24,6 +24,7 @@ macro_rules! os {
 mod agents;
 mod classify;
 mod control;
+mod environment;
 mod history;
 mod paths;
 mod receiver;
@@ -50,6 +51,10 @@ fn main() -> eframe::Result<()> {
     }
     // The ledger and the advisor: `--ledger`, `--account-add`, `--account-remove`, `--advise`.
     if let Some(code) = router::cli(&args) {
+        std::process::exit(code);
+    }
+    // The managed environment: `--env...` and `--work...`.
+    if let Some(code) = environment::cli(&args) {
         std::process::exit(code);
     }
     // `--agents` lists the AI agents found running. It changes nothing.

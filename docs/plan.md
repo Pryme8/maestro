@@ -1,6 +1,6 @@
 # Maestro: plan
 
-As of 2026-11-24. Phases 1 to 4 are running in a first form. Of phase 5, the ledger and advisor are built, the relay prints its plan without running it, and the managed environment is not built.
+As of 2026-11-24. Phases 1 to 4 are running in a first form. Of phase 5, the ledger and advisor are built, the relay prints its plan without running it, and the managed environment has recorded folders, works and snapshots but no isolated image.
 
 ## Vision
 
@@ -92,7 +92,7 @@ Built so far, in a first form:
 - **Advisor:** for a task's size and the rating it needs, up to three routes with their cost and their effect on each allowance. It prefers something that fits, then the cheapest, then the allowance with the most left, and keeps a reserve of each allowance out of its plans. A two-tool split counts the cost of the handoff and is dropped when it saves nothing.
 - **Relay plan:** a dry run. It prints what each step would run and the handoff brief. Commands are shown per tool and per kind of sign-in, from [research/relay.md](research/relay.md): Claude Code on either, and Codex, Cursor and Gemini CLI on an API key only, because their terms do not say whether another program may start them on a subscription login. Cursor's acceptable use policy also bars automated access outright, which conflicts with its own documents for scripted runs and is unresolved.
 
-Not built: running a relay, the managed environment, and context balancing. What they take is below.
+Not built: running a relay, the isolated image of the managed environment, and context balancing. What they take is below.
 
 It can be exact about cost on API-billed accounts, can only estimate subscription quota, and cannot measure answer quality. "Optimal" therefore means the cheapest route that follows rules you set.
 
@@ -122,6 +122,13 @@ Relays run inside an environment image the app manages, not on your desktop. Age
 - **Image:** a WSL2 distro first, then a VM or dev container, with the coding toolchain and each vendor's command-line agent preinstalled. You sign in to each tool inside it once.
 - **Recorded paths:** only the folders you mount are visible inside, and the app records which ones each route uses.
 - **Snapshots:** the app takes a snapshot before each relay, so a bad run can be rolled back.
+- **Built so far**, from the command line only:
+  - **Recorded paths:** a list of folders, and a work can only be cut from a repository inside one.
+  - **Works:** a git worktree per route on a branch `maestro/<name>`, kept in Maestro's data folder.
+  - **Snapshots:** of a work, not of the image. A snapshot is a commit of the worktree as it stands, kept under `refs/maestro/`, and a rollback restores it. Ignored files are left out.
+  - **Image:** Maestro can use a WSL distro that already exists and runs git inside it. It reports whether that distro mounts every Windows drive. It prints the steps for a dedicated image but does not run them.
+- **Found while building:** a worktree records absolute paths, and those differ between Windows and the distro, so a worktree made on one side cannot be read by git on the other. Maestro therefore runs every git command on the side the relay will run on. Git's relative-path worktrees would lift this, but they mark the repository in a way older git versions refuse to open, including the git in current Ubuntu images.
+- **Still to do:** make the dedicated image and confirm that it sees only the recorded folders; snapshot the whole image with `wsl --export`; a container image for Linux and macOS, where works currently run on the machine itself; a page in the window.
 - **Not a separate operating system:** Maestro replaces the interfaces of the operating system you already run, not the system underneath. A boot-into system was considered and dropped for now, because it would mean maintaining a Linux distribution. A bootable USB version of the same image is a possible later step.
 
 ## In the game
@@ -140,7 +147,7 @@ The router is phase 5, but a bare ledger and advisor are trialled first as a sta
 2. **Controls:** task profiles that stop what a task does not need, plus process, network and adapter actions, all with undo.
 3. **Agents:** recogniser, telemetry receiver, crew, quests and budgets.
 4. **Depth:** timeline, achievements, account totals, then Linux and macOS. Built, except that macOS has never been compiled and the Linux window has not been seen.
-5. **Router:** the advisor first, since it only needs the ledger, then the managed environment and the relay. The ledger and advisor are built and the relay is a dry run; the managed environment comes next, because a relay must not run outside it. It depends on phase 3 only, so it can move ahead of phases 1, 2 and 4 if the trial pays off.
+5. **Router:** the advisor first, since it only needs the ledger, then the managed environment and the relay. The ledger and advisor are built and the relay is a dry run. The managed environment has works and snapshots; its isolated image comes next, because a relay must not run outside it. It depends on phase 3 only, so it can move ahead of phases 1, 2 and 4 if the trial pays off.
 
 Cursor and Claude adapters are built first. Each phase works on its own, so the build can stop after any of them.
 
