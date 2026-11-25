@@ -1029,18 +1029,46 @@ pub fn cli(args: &[String]) -> Option<i32> {
             eprintln!("--run needs a folder and a request.");
             return Some(2);
         };
-        let mut run = match Run::start(feed.clone(), Path::new(folder), prompt, Leave::ReadOnly, || {}) {
+        // `--answer allow` or `--answer refuse` answers every question the
+        // agent asks the same way. Without it the run is read-only.
+        let answer = after("--answer").and_then(|i| args.get(i + 1)).map(|a| a == "allow");
+        let leave = if answer.is_some() { Leave::AskFirst } else { Leave::ReadOnly };
+        let mut run = match Run::start(feed.clone(), Path::new(folder), prompt, leave, || {}) {
             Ok(run) => run,
             Err(problem) => {
                 eprintln!("{problem}");
                 return Some(1);
             }
         };
-        // One request, then no more: the tool exits when it has answered.
-        run.finish();
+        if answer.is_none() {
+            // One request, then no more: the tool exits when it has answered.
+            run.finish();
+        }
         while run.running() {
             std::thread::sleep(std::time::Duration::from_millis(200));
             show(&feed, usize::MAX);
+            let (asks, answered) = match feed.lock() {
+                Ok(feed) => {
+                    let session = feed.sessions.iter().find(|s| s.id == run.id);
+                    (
+                        session.map(|s| s.asks.clone()).unwrap_or_default(),
+                        session.is_some_and(|s| s.steps.iter().any(|s| matches!(s.what, What::Finished { .. }))),
+                    )
+                }
+                Err(_) => break,
+            };
+            for ask in asks {
+                let allow = answer.unwrap_or(false);
+                println!("          why it asks: {}", if ask.reason.is_empty() { "-" } else { &ask.reason });
+                if let Err(problem) = run.answer(&ask.request_id, allow, "Refused from the command line.") {
+                    eprintln!("{problem}");
+                }
+            }
+            // The questions have to be answered over the same line, so it is
+            // only closed once the request has been answered in full.
+            if answered {
+                run.finish();
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(300));
         show(&feed, usize::MAX);

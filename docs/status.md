@@ -64,7 +64,8 @@ Blocking one program on Linux takes a control group for the program and an nftab
 - The page was seen on screen once with real data: the services list and the session chips drew as intended. The services list was then made more compact and Cursor's editor is now found as well as its agent; those changes and the map were then seen once in saved pictures, drawn as intended. What the map is built from has unit tests.
 - `--services` was run on Windows, where it reported Claude Code as needing sign-in and Ollama as running, both correctly. The Sign in button has not been pressed.
 - Reading session files was run from the command line against two real sessions on Windows.
-- Starting a run, sending it a second message and interrupting it were run against the real `claude` command. Its login had expired, so each request came back as a sign-in error, and no run that calls tools has been driven from Maestro yet.
+- Three signed-in runs were driven from the command line on Windows against the real `claude` command. One ran a shell command and its call and result showed as they happened. One asked to write a file and was refused: no file was made, the reason reached the agent and it said it had not been allowed. One asked the same and was allowed: the file was written. Each cost between about $0.15 and $0.38 by the tool's own estimate.
+- The Allow and Refuse buttons use the same code as those runs but have not been clicked. Sending a second message and interrupting were only run while the tool was signed out, when every request came back as a sign-in error.
 
 **Timeline**
 

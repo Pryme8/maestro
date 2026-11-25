@@ -54,6 +54,7 @@ These follow the same locks as the buttons: see [Controls](controls.md#guard-rai
 | `--watch` | Prints what your Claude Code sessions are doing as it happens |
 | `--watch-once` | Prints their latest steps and exits |
 | `--run <folder> "<request>"` | Starts Claude Code in that folder, read-only, and prints each step until it answers |
+| `--run <folder> "<request>" --answer allow\|refuse` | The same, but it asks before each step that needs permission and every question gets that answer |
 
 See [Agents](agents.md) and [Live](live.md).
 

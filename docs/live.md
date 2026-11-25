@@ -42,6 +42,16 @@ Each session can be shown as a map or as a list.
 
 Hover anything for the detail. The step list stays underneath the map, and the **List** switch shows the list alone.
 
+## Approving each step
+
+A session started from Maestro asks before every step that needs permission, such as changing a file or running a command Claude Code does not already treat as harmless. The question appears above the controls in an amber box and the session's chip shows "needs you".
+
+- The box shows the tool, the exact command or file, what the tool says it is for and why it has to ask. Hover the command for the whole call.
+- **Allow this once** lets that one step go ahead exactly as shown. The next step is asked again.
+- **Refuse** stops the step. Anything typed in the reason box goes back to the agent, so it can try another way.
+
+When you start a session you choose one of three settings: ask each time, let file edits through and ask about everything else, or refuse everything so it can only read and search. Allowing a kind of step for the rest of a session, and changing a step before allowing it, are not built.
+
 ## Services
 
 Each agent tool is one line that opens for detail, and the ones that need something from you open by themselves. For each tool:
@@ -69,6 +79,6 @@ A program started from the macOS Finder or Dock does not get the `PATH` your ter
 
 - `--services` prints each tool's state, how it was checked and what to do about it.
 - `--watch` prints what your Claude Code sessions are doing as it happens. `--watch-once` prints their latest steps and exits.
-- `--run <folder> "<request>"` starts Claude Code in that folder, read-only, and prints each step until it answers.
+- `--run <folder> "<request>"` starts Claude Code in that folder, read-only, and prints each step until it answers. Add `--answer refuse` or `--answer allow` to have it ask before each step that needs permission and give every question that same answer. `--answer allow` lets it change files and run commands unasked, so use it only in a folder you can throw away.
 
 If your Claude Code session files are somewhere else, set `MAESTRO_CLAUDE_DIR` to the folder that holds them.
