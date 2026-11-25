@@ -578,6 +578,33 @@ pub fn claude_args(leave: Leave) -> Vec<&'static str> {
     args
 }
 
+/// The short names Claude Code takes for its newest models, cheapest first.
+pub const MODELS: [(&str, &str); 4] = [
+    ("haiku", "fastest and cheapest, for small jobs"),
+    ("sonnet", "the everyday model"),
+    ("opus", "stronger, and dearer"),
+    ("fable", "the strongest, and the dearest"),
+];
+
+/// Check a model name before it is handed to the tool. Empty means the
+/// tool's own setting. Anything that could be read as another option is refused.
+pub fn model_arg(text: &str) -> Result<Option<String>, String> {
+    let name = text.trim();
+    if name.is_empty() {
+        return Ok(None);
+    }
+    let plain = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':' | '[' | ']' | '/' | '@'));
+    if !plain || name.starts_with('-') || name.len() > 120 {
+        return Err(format!(
+            "\"{}\" is not a model name. Use a short name such as haiku, or a model's full name.",
+            clip(name, 40)
+        ));
+    }
+    Ok(Some(name.to_string()))
+}
+
 fn user_line(text: &str) -> String {
     json!({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": text}]}}).to_string()
 }
@@ -601,8 +628,10 @@ impl Run {
         cwd: &Path,
         prompt: &str,
         leave: Leave,
+        model: &str,
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Result<Run, String> {
+        let model = model_arg(model)?;
         if !cwd.is_dir() {
             return Err(format!("{} is not a folder.", cwd.display()));
         }
@@ -612,6 +641,7 @@ impl Run {
         let mut command = Command::new("claude");
         command
             .args(claude_args(leave))
+            .args(model.iter().flat_map(|name| ["--model", name.as_str()]))
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -1033,7 +1063,9 @@ pub fn cli(args: &[String]) -> Option<i32> {
         // agent asks the same way. Without it the run is read-only.
         let answer = after("--answer").and_then(|i| args.get(i + 1)).map(|a| a == "allow");
         let leave = if answer.is_some() { Leave::AskFirst } else { Leave::ReadOnly };
-        let mut run = match Run::start(feed.clone(), Path::new(folder), prompt, leave, || {}) {
+        // `--model <name>` picks the model; without it the tool's own setting is used.
+        let model = after("--model").and_then(|i| args.get(i + 1)).map_or("", String::as_str);
+        let mut run = match Run::start(feed.clone(), Path::new(folder), prompt, leave, model, || {}) {
             Ok(run) => run,
             Err(problem) => {
                 eprintln!("{problem}");
@@ -1301,6 +1333,22 @@ mod tests {
         let told: Value = serde_json::from_str(&answer_line(&ask, false, "use cargo clean")).unwrap();
         assert_eq!(told["response"]["response"]["message"], "use cargo clean");
         assert!(told["response"]["response"].get("updatedInput").is_none());
+    }
+
+    #[test]
+    fn a_model_name_cannot_carry_another_option() {
+        assert_eq!(model_arg("  "), Ok(None));
+        assert_eq!(model_arg(" haiku "), Ok(Some("haiku".into())));
+        assert_eq!(model_arg("claude-opus-5-5[1m]"), Ok(Some("claude-opus-5-5[1m]".into())));
+        assert_eq!(model_arg("us.anthropic.claude-sonnet-5-5-v1:0"), Ok(Some("us.anthropic.claude-sonnet-5-5-v1:0".into())));
+        for bad in ["--dangerously-skip-permissions", "haiku --bare", "-p", "a\nb", "x;y"] {
+            assert!(model_arg(bad).is_err(), "{bad}");
+        }
+        // A bad name stops the run before anything is started.
+        let feed = Arc::new(Mutex::new(Feed::default()));
+        let here = std::env::temp_dir();
+        assert!(Run::start(feed.clone(), &here, "hi", Leave::ReadOnly, "--bare", || {}).is_err());
+        assert!(feed.lock().unwrap().sessions.is_empty());
     }
 
     #[test]

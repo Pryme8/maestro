@@ -15,6 +15,8 @@ pub(super) struct LiveUi {
     folder: String,
     prompt: String,
     leave: Leave,
+    /// The model a new session runs on. Empty means the tool's own setting.
+    model: String,
     say: String,
     /// Why a step is being refused, sent back to the agent.
     why: String,
@@ -63,6 +65,7 @@ impl LiveUi {
             folder: String::new(),
             prompt: String::new(),
             leave: Leave::AskFirst,
+            model: String::new(),
             say: String::new(),
             why: String::new(),
             problem: None,
@@ -187,6 +190,33 @@ impl App {
                         .desired_rows(3)
                         .desired_width(620.0),
                 );
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Model").color(DIM).size(11.0));
+                    let shown = if lv.model.trim().is_empty() {
+                        "Claude Code's own setting".to_string()
+                    } else {
+                        lv.model.trim().to_string()
+                    };
+                    egui::ComboBox::from_id_salt("live-model")
+                        .selected_text(shown)
+                        .width(190.0)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut lv.model, String::new(), "Claude Code's own setting");
+                            for (name, what) in live::MODELS {
+                                ui.selectable_value(&mut lv.model, name.to_string(), format!("{name}: {what}"));
+                            }
+                        });
+                    ui.add(
+                        egui::TextEdit::singleline(&mut lv.model)
+                            .hint_text("or a model's full name")
+                            .desired_width(220.0),
+                    );
+                    ui.label(
+                        RichText::new("A cheaper model for a small job uses less of your plan.")
+                            .color(DIM)
+                            .size(11.0),
+                    );
+                });
                 ui.label(RichText::new("Before a step that needs permission, such as running a command or changing a file:").color(DIM).size(11.0));
                 ui.radio_value(&mut lv.leave, Leave::AskFirst, "Ask me each time")
                     .on_hover_text("Each such step waits here until you allow or refuse it.");
@@ -210,7 +240,7 @@ impl App {
                         let leave = lv.leave;
                         let wake = ui.ctx().clone();
                         let folder = std::path::PathBuf::from(lv.folder.trim());
-                        match Run::start(lv.feed.clone(), &folder, lv.prompt.trim(), leave, move || {
+                        match Run::start(lv.feed.clone(), &folder, lv.prompt.trim(), leave, &lv.model, move || {
                             wake.request_repaint()
                         }) {
                             Ok(run) => {
