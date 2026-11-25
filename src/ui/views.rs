@@ -76,6 +76,18 @@ impl App {
                 ui.selectable_value(&mut self.class_filter, Some(class), text)
                     .on_hover_text(class.explain());
             }
+            let stale = groups.iter().filter(|g| g.stale.is_some()).count();
+            if stale > 0 || self.only_stale {
+                ui.add_space(8.0);
+                ui.toggle_value(
+                    &mut self.only_stale,
+                    RichText::new(format!("Stale ({stale})")).color(BLUE).size(11.0),
+                )
+                .on_hover_text(
+                    "Programs whose window is not responding, or that have used no processor \
+                     or disk for 15 minutes while Maestro has been running. Click one to end it.",
+                );
+            }
         });
         ui.add_space(6.0);
 
@@ -83,6 +95,7 @@ impl App {
         let shown: Vec<&Group<'_>> = groups
             .iter()
             .filter(|g| self.class_filter.is_none_or(|class| g.class == class))
+            .filter(|g| !self.only_stale || g.stale.is_some())
             .filter(|g| needle.is_empty() || g.name.to_lowercase().contains(&needle))
             .collect();
 

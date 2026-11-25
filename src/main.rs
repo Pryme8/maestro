@@ -30,6 +30,7 @@ mod netmap;
 mod paths;
 mod receiver;
 mod router;
+mod stale;
 mod telemetry;
 mod ui;
 #[cfg(all(windows, target_pointer_width = "64"))]

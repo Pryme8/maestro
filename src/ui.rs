@@ -94,6 +94,10 @@ pub struct App {
     /// The names behind network addresses, looked up in the background.
     names: crate::netmap::Names,
     net: network::NetUi,
+    /// When each process was last busy, kept by the sampling thread.
+    stale: Arc<Mutex<crate::stale::Tracker>>,
+    /// Show only programs flagged as not responding or cold.
+    only_stale: bool,
     shot: Option<Shot>,
 }
 
@@ -108,6 +112,8 @@ struct Group<'a> {
     paused: bool,
     /// The most notable class among the program's processes.
     class: Class,
+    /// Not responding, or idle for a long time.
+    stale: Option<crate::stale::Stale>,
 }
 
 impl App {
@@ -129,11 +135,16 @@ impl App {
         let history = Arc::new(Mutex::new(History::load()));
         let live = Arc::new(Live::default());
         let (history_thread, live_thread) = (history.clone(), live.clone());
+        let stale = Arc::new(Mutex::new(crate::stale::Tracker::default()));
+        let stale_thread = stale.clone();
         std::thread::spawn(move || {
             let mut sampler = Sampler::new();
             loop {
                 std::thread::sleep(Duration::from_millis(1000));
                 let snap = sampler.sample();
+                if let Ok(mut stale) = stale_thread.lock() {
+                    stale.update(&snap);
+                }
                 // The history is kept here, not in the window, so it carries
                 // on while the window is minimised and drawing nothing.
                 if let Ok(mut history) = history_thread.lock() {
@@ -182,6 +193,8 @@ impl App {
             router: router::RouterUi::load(),
             names,
             net: network::NetUi::new(),
+            stale,
+            only_stale: false,
             shot: screenshot.map(|path| Shot {
                 path,
                 requested: false,
@@ -241,6 +254,14 @@ impl eframe::App for App {
         self.ctl.sync(&snap);
         let paused = self.ctl.paused_pids();
         let mut groups = group_processes(&snap, &sockets_by_pid, &classes, &paused);
+        if let Ok(stale) = self.stale.lock() {
+            for group in &mut groups {
+                // What Maestro froze is idle by design, and locked programs cannot be closed.
+                if !group.paused && !matches!(group.class, Class::System | Class::Critical) {
+                    group.stale = stale.judge(group.procs.iter().map(|p| p.pid), snap.taken_ms);
+                }
+            }
+        }
         match self.sort {
             Sort::Cpu => groups.sort_by(|a, b| b.cpu.total_cmp(&a.cpu)),
             Sort::Memory => groups.sort_by(|a, b| b.mem.cmp(&a.mem)),
@@ -622,6 +643,15 @@ fn tile(ui: &mut Ui, group: &Group<'_>, selected: bool) -> egui::Response {
         3.5,
         class_colour(group.class),
     );
+    if let Some(stale) = group.stale {
+        painter.text(
+            pos2(rect.max.x - 20.0, rect.min.y + 30.0),
+            Align2::RIGHT_TOP,
+            stale.short(),
+            FontId::proportional(11.0),
+            stale_colour(stale),
+        );
+    }
     response
         .on_hover_cursor(egui::CursorIcon::PointingHand)
         .on_hover_text(summary(group))
@@ -663,6 +693,9 @@ fn detail(
             .size(12.0),
     );
     ui.label(RichText::new(group.class.explain()).color(DIM).size(11.0));
+    if let Some(stale) = group.stale {
+        ui.label(RichText::new(stale.explain()).color(stale_colour(stale)).size(11.0));
+    }
     ui.label(
         RichText::new("Judged from its name, file location and what started it. Signatures are not checked yet.")
             .color(DIM)
@@ -794,6 +827,7 @@ fn group_processes<'a>(
             sockets: 0,
             paused: false,
             class: Class::App,
+            stale: None,
         });
         group.cpu += p.cpu_percent;
         group.mem += p.memory_bytes;
@@ -810,6 +844,13 @@ fn group_processes<'a>(
     groups
 }
 
+fn stale_colour(stale: crate::stale::Stale) -> Color32 {
+    match stale {
+        crate::stale::Stale::Hung => RED,
+        crate::stale::Stale::Cold { .. } => BLUE,
+    }
+}
+
 fn class_colour(class: Class) -> Color32 {
     match class {
         Class::App => TEAL,
@@ -822,9 +863,10 @@ fn class_colour(class: Class) -> Color32 {
 
 fn summary(group: &Group<'_>) -> String {
     format!(
-        "{}\n{}\n{} running, {:.1}% processor, {} memory, {} sockets",
+        "{}\n{}{}\n{} running, {:.1}% processor, {} memory, {} sockets",
         group.name,
         group.class.label(),
+        group.stale.map(|s| format!("\n{}", s.explain())).unwrap_or_default(),
         group.procs.len(),
         group.cpu,
         bytes(group.mem),
