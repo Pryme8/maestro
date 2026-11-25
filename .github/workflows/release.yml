@@ -1,0 +1,117 @@
+# Builds the downloads for Windows, macOS and Linux.
+#
+# Pushing a tag like v0.1.0 builds all three and opens a DRAFT release with the
+# files attached. Nothing is public until the draft is published by hand.
+# "Run workflow" on the Actions page builds the same files without a release,
+# to try the build out. See docs/releasing.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build for ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # The macOS code has never been compiled. Until it has, a failure there
+    # must not hold back the other two. Set `experimental: false` once it builds.
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            experimental: false
+          - name: linux-x64
+            os: ubuntu-22.04
+            experimental: false
+          - name: macos-universal
+            os: macos-latest
+            experimental: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version
+        shell: bash
+        # tr drops the carriage return a Windows checkout leaves on the line.
+        run: echo "VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1 | tr -d '\r')" >> "$GITHUB_ENV"
+
+      - name: Check the tag matches Cargo.toml
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "The tag is $GITHUB_REF_NAME but Cargo.toml says $VERSION."
+            exit 1
+          fi
+
+      - name: Install Linux build packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Build and package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cargo build --release --locked
+          mkdir -p dist/pack
+          cp target/release/maestro.exe README.md LICENSE dist/pack/
+          cd dist/pack
+          7z a "../maestro-$VERSION-windows-x64.zip" .
+
+      - name: Build and package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cargo build --release --locked
+          mkdir -p dist/pack
+          cp target/release/maestro README.md LICENSE dist/pack/
+          tar -czf "dist/maestro-$VERSION-linux-x64.tar.gz" -C dist/pack .
+
+      - name: Build and package (macOS)
+        if: runner.os == 'macOS'
+        run: sh scripts/bundle-macos.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  draft:
+    name: Draft the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Write checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Open a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --title "Maestro ${GITHUB_REF_NAME#v}" \
+            --generate-notes
