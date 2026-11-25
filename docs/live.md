@@ -17,7 +17,7 @@ A session started somewhere else can be watched but not directed from this page.
 
 ## Start a session and direct it
 
-Give a folder and a request, and Maestro starts Claude Code there with no window, on your own Claude Code login. While it works you can:
+Give a folder and a request, and Maestro starts Claude Code there with no window, on Claude Code's own sign-in or one you have added. While it works you can:
 
 - send it a message,
 - interrupt the current step,
@@ -25,7 +25,7 @@ Give a folder and a request, and Maestro starts Claude Code there with no window
 - close it to new messages, so it finishes what it has and exits,
 - stop it.
 
-**By default it may only read and search.** One tick lets it edit files in its folder. A session started here cannot ask you anything part-way through: it is either read-only or allowed to edit. Approving each step from Maestro is planned and not built.
+**By default it asks you before every step that needs permission.** You can instead let it change files in its folder and be asked about the rest, or have every such step refused so it can only read and search. See [Approving each step](#approving-each-step). You can also choose which [account](#more-than-one-account) and which model the session uses.
 
 ## The map
 

@@ -74,4 +74,6 @@ Close Maestro, delete the program (or `Maestro.app`), and delete the data folder
 
 Before deleting it, undo any network block or adapter switch from the action log, because those are changes to the operating system that stay in place without Maestro. If you already deleted it: on Windows, Maestro's firewall rules are in the group named "Maestro" in Windows Firewall, and an adapter can be switched back on in the system's network settings on any system.
 
+The data folder also holds any [extra Claude Code sign-ins](live.md#more-than-one-account) you added, with their session history. Deleting it signs those accounts out.
+
 Works made with the [managed environment](environment.md) leave a branch named `maestro/<name>` in your repository. Remove works with `--work-remove` before deleting the data folder, then delete those branches yourself if you do not want them.

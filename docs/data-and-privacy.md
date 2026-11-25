@@ -13,16 +13,20 @@ The folder is `%LOCALAPPDATA%\Maestro` on Windows, `~/Library/Application Suppor
 | `usage.json` | The token and cost figures agents reported, by hour for eight days and by day for up to 400 days |
 | `ledger.json` | The AI accounts you entered on the Router page |
 | `environment.json` | Recorded folders, works and their snapshots |
+| `logins.json` | The names of the Claude Code sign-ins you added and, for a key sign-in, the name of the variable that holds its key. Never a key |
+| `logins/` | One folder per named sign-in. Claude Code keeps that account's sign-in, settings and session history in it. Maestro makes the folder and does not open what the tool puts there |
 | `work/` | The worktrees of your works |
 
-All of them are plain JSON you can read. Delete the folder to forget everything.
+The files are plain JSON you can read. Delete the folder to forget everything.
+
+**The `logins/` folders hold whatever Claude Code stores to stay signed in to each account.** Treat them like a password: do not copy them to a shared place or into a backup other people can read. Deleting the data folder signs those accounts out and deletes their session history.
 
 ## What it reads
 
 - **Running processes:** names, file paths, what started each one, and processor, memory and disk figures. Command lines are read once per process to recognise agents, and are not kept.
 - **Network sockets:** which process owns each one, and the remote address and port. Not the contents of any traffic.
 - **Claude Code's session files,** on the [Live](live.md) page and with `--watch`. These hold your conversations with the agent. Maestro shows their steps and holds them in memory only: they are not copied into Maestro's own files.
-- **Whether a key is set** for each agent tool. Maestro checks that a key exists and never reads, shows or stores the key itself.
+- **Whether a key is set** for each agent tool. Maestro checks that a key exists and never shows or stores it. For a sign-in that uses a key, Maestro reads the key from the variable you named at the moment a session starts and hands it to Claude Code. It is not written down or shown.
 
 ## What leaves your computer
 

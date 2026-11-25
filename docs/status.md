@@ -27,7 +27,7 @@ Known ahead of time:
 - macOS shows less about processes that are not yours to a program without administrator rights, so some file paths and sockets may be missing.
 - Blocking one program on the network takes a Network Extension content filter, which has to be signed with an Apple developer identity. It is not built.
 - A program started from Finder or the Dock does not get your terminal's `PATH`, which may hide installed agent tools from the Services list.
-- **Sign in… for a named sign-in is wrong on macOS.** The terminal it opens is not told which folder to use, so it would sign in to Claude Code's own account instead of the named one. Until that is fixed, sign a named sign-in in by hand on a Mac: run `claude auth login` with `CLAUDE_CONFIG_DIR` set to the folder `--logins` prints. Whether macOS keeps two sign-ins apart at all has not been checked, because Claude Code stores its sign-in in the system keychain there.
+- **Sign in… for a named sign-in on macOS is untested.** Terminal starts a shell that inherits nothing from Maestro, so the sign-in's folder is written into the command it runs. That has a unit test and has never been run on a Mac. Whether macOS keeps two sign-ins apart at all has not been checked either, because Claude Code stores its sign-in in the system keychain there. To be sure on a Mac, check that the terminal's command starts with `CLAUDE_CONFIG_DIR=` and the folder `--logins` prints.
 
 If you have a Mac, a report of what happens when you build and run it is one of the most useful things you can send. See [Contributing](../CONTRIBUTING.md).
 

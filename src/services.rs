@@ -391,9 +391,7 @@ pub fn open_sign_in(command: &str, env: &[(String, std::ffi::OsString)]) -> Resu
             .envs(env.iter().map(|(k, v)| (k, v)))
             .spawn()
     } else if cfg!(target_os = "macos") {
-        Command::new("osascript")
-            .args(["-e", &format!("tell application \"Terminal\" to do script \"{command}\"")])
-            .spawn()
+        Command::new("osascript").args(["-e", &mac_sign_in_script(command, env)]).spawn()
     } else {
         Command::new("x-terminal-emulator")
             .args(["-e", command])
@@ -403,6 +401,26 @@ pub fn open_sign_in(command: &str, env: &[(String, std::ffi::OsString)]) -> Resu
     result
         .map(|_| ())
         .map_err(|e| format!("Could not open a terminal. Run `{command}` in one yourself. ({e})"))
+}
+
+/// What to tell macOS to do: ask Terminal to run the command. Terminal starts
+/// a shell of its own that inherits nothing from Maestro, so what has to be
+/// set is written into the line it runs. A key is left out, because the line
+/// is shown in the terminal.
+fn mac_sign_in_script(command: &str, env: &[(String, std::ffi::OsString)]) -> String {
+    let mut line = String::new();
+    for (name, value) in env {
+        if name == crate::logins::KEY_VAR {
+            continue;
+        }
+        // Inside single quotes a shell reads everything as it is, except a single quote.
+        let value = value.to_string_lossy().replace('\'', r"'\''");
+        line.push_str(&format!("{name}='{value}' "));
+    }
+    line.push_str(command);
+    // Inside an AppleScript string, a backslash and a double quote need a backslash.
+    let line = line.replace('\\', r"\\").replace('"', "\\\"");
+    format!("tell application \"Terminal\" to do script \"{line}\"")
 }
 
 /// `--services`: print each tool's state and what to do about it.
@@ -423,6 +441,25 @@ pub fn print() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_mac_sign_in_line_carries_the_folder_and_never_a_key() {
+        let env = [
+            (crate::logins::CONFIG_VAR.to_string(), "/Users/o'neil/a \"b\"/work".into()),
+            (crate::logins::KEY_VAR.to_string(), "secret".into()),
+        ];
+        let script = mac_sign_in_script("claude auth login", &env);
+        assert_eq!(
+            script,
+            r#"tell application "Terminal" to do script "CLAUDE_CONFIG_DIR='/Users/o'\\''neil/a \"b\"/work' claude auth login""#
+        );
+        assert!(!script.contains("secret"));
+        // With nothing to set it is the plain command.
+        assert_eq!(
+            mac_sign_in_script("claude auth login", &[]),
+            r#"tell application "Terminal" to do script "claude auth login""#
+        );
+    }
 
     #[test]
     fn claude_is_ready_when_signed_in_or_when_a_key_is_set() {

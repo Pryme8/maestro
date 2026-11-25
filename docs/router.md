@@ -40,7 +40,7 @@ A command is shown only where the vendor's own documents support it: Claude Code
 
 ## Limits
 
-- **Usage is counted per tool,** not per account or model. Two accounts on the same tool share one figure.
+- **Usage is counted per tool,** not per account or model. Two accounts on the same tool share one figure. The named sign-ins on the [Live](live.md#more-than-one-account) page are not tied to ledger accounts yet.
 - **Use from other devices is not seen,** nor use in a vendor's web app, so an allowance can be lower than shown.
 - **The advisor cannot judge answer quality.** "Best route" means cheapest within your ratings.
 

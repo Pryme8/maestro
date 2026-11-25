@@ -13,7 +13,7 @@ Maestro shows everything running on your computer, lets you pause, end or block 
 - [Controls](controls.md): pause, resume, end, clear the machine for a task, profiles, network blocks, and undo.
 - [Network](network.md): who each program is connected to, and which ports are open.
 - [Agents](agents.md): AI agents recognised as crew, with usage reports, budgets and quests.
-- [Live](live.md): watch an agent session step by step, start one, and direct it.
+- [Live](live.md): watch an agent session step by step, start one, approve its steps, and choose which account and model it runs on.
 - [Timeline](timeline.md): the last day, events, what agents spent, and achievements.
 - [Router](router.md): a ledger of your AI accounts and an advisor that proposes the cheapest route for a task.
 
