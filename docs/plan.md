@@ -90,7 +90,7 @@ Built so far, in a first form:
 
 - **Ledger:** accounts you enter by hand, each with a tool, a model, your rating of the model, and either a price per million tokens or your estimate of an allowance over a rolling window of hours. The receiver now files usage by the hour, for eight days, so a rolling window can be counted.
 - **Advisor:** for a task's size and the rating it needs, up to three routes with their cost and their effect on each allowance. It prefers something that fits, then the cheapest, then the allowance with the most left, and keeps a reserve of each allowance out of its plans. A two-tool split counts the cost of the handoff and is dropped when it saves nothing.
-- **Relay plan:** a dry run. It prints what each step would run and the handoff brief. Commands are shown per tool and per kind of sign-in, from [research/relay.md](research/relay.md): Claude Code on either, and Codex, Cursor and Gemini CLI on an API key only, because their terms do not say whether another program may start them on a subscription login.
+- **Relay plan:** a dry run. It prints what each step would run and the handoff brief. Commands are shown per tool and per kind of sign-in, from [research/relay.md](research/relay.md): Claude Code on either, and Codex, Cursor and Gemini CLI on an API key only, because their terms do not say whether another program may start them on a subscription login. Cursor's acceptable use policy also bars automated access outright, which conflicts with its own documents for scripted runs and is unresolved.
 
 Not built: running a relay, the managed environment, and context balancing. What they take is below.
 

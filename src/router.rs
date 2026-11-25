@@ -600,15 +600,17 @@ pub mod relay {
             with_key: Ok("agent -p \"<task and brief>\" --output-format json --workspace <worktree>"),
             with_login: Err(
                 "Cursor's terms do not say whether another program may start its agent on a \
-                 subscription login, and its documents say to use an API key for scripts.",
+                 subscription login, its acceptable use policy bars automated access, and its \
+                 documents say to use an API key for scripts.",
             ),
         },
         Relay {
             agent: "gemini-cli",
             with_key: Ok("gemini -p \"<task and brief>\" --output-format json"),
             with_login: Err(
-                "Google moved its consumer plans off Gemini CLI on 2026-06-18, and its terms \
-                 do not say whether another program may start it on a login.",
+                "Google moved its consumer plans off Gemini CLI on 2026-06-18, and the tool \
+                 that replaced it does not support being wrapped by another program on a \
+                 consumer plan.",
             ),
         },
     ];

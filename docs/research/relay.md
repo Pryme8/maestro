@@ -1,6 +1,6 @@
 # Relay: how each tool is run without its window, and what its terms say
 
-Desk research, read on 2026-11-24 by an AI agent. Nothing here has been run. Every source below is tagged [P]: the page itself was opened and read. No claim rests on a search snippet. Most pages show no date; dates are given where shown. This is a reading of public documents, not legal advice.
+Desk research, read on 2026-11-24 by two AI agents working separately; this page merges the two readings and says where they differ. Nothing here has been run. Every source below is tagged [P]: the page itself was opened and read. No claim rests on a search snippet. Some pages were read through a tool that summarises them, so check exact wording at the source before quoting it. Most pages show no date; dates are given where shown. This is a reading of public documents, not legal advice.
 
 The relay Maestro plans would start a vendor's own command-line tool for one prompt, with the login already on the machine, read what it prints, and pass a short brief to the next tool. Maestro would never hold a credential or call a vendor's API itself. Two questions matter per tool: how it is run for one prompt, and whether its terms let another program do that on a subscription login.
 
@@ -11,7 +11,7 @@ The relay Maestro plans would start a vendor's own command-line tool for one pro
 | Claude Code | command shown | command shown, with the caveat below |
 | Codex CLI | command shown | no command: terms do not address it |
 | Cursor CLI | command shown | no command: terms do not address it |
-| Gemini CLI | command shown | no command: consumer plans no longer served, terms do not address it |
+| Gemini CLI | command shown | no command: consumer plans no longer served, and its successor restricts being wrapped |
 
 Where the terms do not address a launched tool on a subscription login, Maestro shows no command and says why. That is a choice to stay on the safe side of an unanswered question, not a finding that it is forbidden. The relay is a dry run in this build: it prints the plan and starts nothing.
 
@@ -25,12 +25,12 @@ Where the terms do not address a launched tool on a subscription login, Maestro 
 - Permissions: from version 2.1.302, `-p` starts in manual mode, and a call that needs approval is denied unless something approves it. `--allowedTools` and `--permission-mode` grant more.
 - `--model` picks the model.
 - Exit code 0 on success, non-zero on failure. Some failures, such as missing sign-in, are printed as the result.
-- `--bare` does not use the subscription login and needs an API key. The documents say `--bare` will become the default for `-p` in a future release, which would end subscription relays unless the flag is turned off.
+- `--bare` does not use the subscription login and needs an API key ([authentication](https://code.claude.com/docs/en/authentication) [P]), so a relay on a subscription must not pass it. The documents say `--bare` will become the default for `-p` in a future release, which would end subscription relays unless the flag is turned off.
 
 **Terms** ([legal and compliance](https://code.claude.com/docs/en/legal-and-compliance) [P], [consumer terms](https://www.anthropic.com/legal/consumer-terms) [P], effective 2025-10-08)
 
 - Using the credentials yourself is prohibited: third-party developers may not offer Claude.ai login in their own applications, route requests through plan credentials, or collect, store or pass on credentials or session tokens.
-- Starting the unmodified tool is addressed, favourably: the restriction does not prevent a person signing in to the unmodified Claude Code with their own subscription, including where a platform hosts Claude Code. Products that run Claude Code must not modify it, disable a sign-in method, or pay for, resell or intermediate usage.
+- Starting the unmodified tool is addressed, favourably: the restriction does not prevent a person signing in to the unmodified Claude Code with their own subscription, including where a platform hosts Claude Code. Products that run Claude Code must not modify it, disable a sign-in method, pay for, resell or intermediate usage, or use the Claude Code name or logo in the product's name, and must agree to the commercial terms.
 - Caveat: plan limits assume ordinary, individual usage, and the consumer terms bar access by automated means except through an API key or where Anthropic explicitly permits it. Whether the documented `claude -p` mode counts as that permission for a subscription login is not stated. A local program starting `claude -p` is not named either way.
 
 ## Codex CLI (OpenAI)
@@ -47,22 +47,24 @@ Where the terms do not address a launched tool on a subscription login, Maestro 
 
 - `codex exec` reuses the saved sign-in, so a ChatGPT login works technically. The documents say API keys are the recommended default for automation.
 - Using the credentials yourself: no Codex-specific clause was found. The general terms forbid sharing account credentials and circumventing rate limits.
-- Starting the unmodified tool from another program: not addressed. The Sign in with ChatGPT terms were not read.
+- OpenAI has a sanctioned route for apps, [Sign in with ChatGPT](https://learn.chatgpt.com/docs/sign-in-with-chatgpt) [P], where the app gets its own client ID and token. That is a different thing from starting Codex, and Maestro does not use it.
+- Starting the unmodified tool from another program: not addressed in any page read.
 
 ## Cursor CLI
 
 **Running one prompt** ([headless](https://cursor.com/docs/cli/headless) [P], [parameters](https://cursor.com/docs/cli/reference/parameters) [P])
 
 - `agent -p "<prompt>"`. The program is called `agent` in the current documents.
-- `--output-format json`. The final text is in `result`. The rest of the JSON, including any usage figures, was not confirmed.
+- `--output-format json` ([output format](https://cursor.com/docs/cli/reference/output-format) [P]). The final text is in `result`, with `is_error`, `duration_ms` and `session_id`. There is no usage or cost field.
 - `--workspace <path>` sets the working directory.
-- Permissions: in this mode it writes to files in the workspace without being asked. Writes outside the workspace, shell commands that are not allowed, and web fetches are rejected unless `--force` is given.
+- Permissions: the two readings differ. One read that this mode writes to files in the workspace without being asked and rejects only writes outside it, shell commands that are not allowed, and web fetches. The other read that anything needing approval is rejected. Both agree `--force` lifts the limit. This needs a test before a relay relies on it.
 - `--model` picks the model. Exit codes are not documented. An administrator can disable this mode for a team.
 
 **Terms** ([authentication](https://cursor.com/docs/cli/reference/authentication) [P], [terms of service](https://cursor.com/terms-of-service) [P], updated 2026-09-03)
 
 - Browser sign-in is recommended for people; for automation, scripts and CI the documents say to use an API key.
-- Neither using the credentials nor starting the tool from another program is addressed. The acceptable use policy the terms point to was not read.
+- The [acceptable use policy](https://cursor.com/acceptable-use-policy) [P], updated 2026-08-11, prohibits reaching the service by automated or non-human means, with no exception for the command-line tool. On its face that conflicts with Cursor's own documents for this mode, API key or not.
+- Starting the tool from another program is not addressed in the terms. Two forum replies from someone who appears to be Cursor staff point both ways: using a subscription outside official clients can trigger enforcement ([thread](https://forum.cursor.com/t/does-using-oh-my-pi-s-cursor-provider-or-an-openai-compatible-proxy-to-the-same-endpoints-violate-cursor-s-tos/167778) [P]), and the command-line tool is built for scripted use ([thread](https://forum.cursor.com/t/bot-as-the-orchestrator-of-local-clis/169588) [P]). Forum replies are not policy.
 
 ## Gemini CLI (Google)
 
@@ -76,7 +78,8 @@ Where the terms do not address a launched tool on a subscription login, Maestro 
 
 **Terms** (README [P], [authentication](https://geminicli.com/docs/get-started/authentication/) [P], `docs/resources/tos-privacy.md` [P])
 
-- Consumer access was removed: the README says free and Google AI plan access moved to Antigravity CLI on 2026-06-18. Gemini CLI now serves Code Assist licences and API keys.
+- Consumer access was removed: the README and [Google's announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli) [P], posted 2026-05-19, say free and Google AI plan access moved to Antigravity CLI on 2026-06-18. Gemini CLI now serves Code Assist licences and API keys.
+- The successor, Antigravity CLI, does address being started by another program, and restricts it: its [FAQ](https://antigravity.google/docs/faq/) [P] says wrapping it inside third-party coding agents or applications is not supported under consumer plans. Maestro has no entry for it.
 - Using the credentials yourself is prohibited: reaching the services behind Gemini CLI with third-party software is named as a violation.
 - Starting the unmodified tool from another program: not addressed.
 
@@ -84,5 +87,5 @@ Where the terms do not address a launched tool on a subscription login, Maestro 
 
 - **Claude Code:** the full list of JSON fields; whether the automated-access exception covers `claude -p` on a subscription login; when `--bare` becomes the default.
 - **Codex CLI:** exit codes; the last third of the command reference; the Sign in with ChatGPT terms.
-- **Cursor CLI:** the JSON fields; exit codes; the acceptable use policy; how this mode is counted against a subscription.
-- **Gemini CLI:** what the default approval mode does here; whether Antigravity CLI has an equivalent mode and what its terms say.
+- **Cursor CLI:** what this mode may write without `--force`; how the acceptable use policy's automation clause squares with the documented mode; whether the forum replies are from staff; how this mode is counted against a subscription.
+- **Gemini CLI:** what the default approval mode does here; what Google counts as a third-party coding agent or application for Antigravity CLI.
