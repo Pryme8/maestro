@@ -27,6 +27,7 @@ Known ahead of time:
 - macOS shows less about processes that are not yours to a program without administrator rights, so some file paths and sockets may be missing.
 - Blocking one program on the network takes a Network Extension content filter, which has to be signed with an Apple developer identity. It is not built.
 - A program started from Finder or the Dock does not get your terminal's `PATH`, which may hide installed agent tools from the Services list.
+- **Sign in… for a named sign-in is wrong on macOS.** The terminal it opens is not told which folder to use, so it would sign in to Claude Code's own account instead of the named one. Until that is fixed, sign a named sign-in in by hand on a Mac: run `claude auth login` with `CLAUDE_CONFIG_DIR` set to the folder `--logins` prints. Whether macOS keeps two sign-ins apart at all has not been checked, because Claude Code stores its sign-in in the system keychain there.
 
 If you have a Mac, a report of what happens when you build and run it is one of the most useful things you can send. See [Contributing](../CONTRIBUTING.md).
 
@@ -67,7 +68,8 @@ Blocking one program on Linux takes a control group for the program and an nftab
 - Three signed-in runs were driven from the command line on Windows against the real `claude` command. One ran a shell command and its call and result showed as they happened. One asked to write a file and was refused: no file was made, the reason reached the agent and it said it had not been allowed. One asked the same and was allowed: the file was written. Each cost between about $0.15 and $0.38 by the tool's own estimate.
 - A run on `--model haiku` was driven for real and reported that model; it cost about $0.07 by the tool's own estimate.
 - Named sign-ins were run from the command line on Windows in a scratch data folder: adding, refusing a name that would share a folder, listing with states, and starting runs. A run under a sign-in that had never been signed in came back as not logged in while Claude Code's own sign-in stayed signed in, which shows the two are kept apart. A run under a key sign-in whose variable was not set was refused before anything started. Signing a second account in, and a run under it, have not been done: that takes a second account. The sign-in list and picker on the Live page have not been seen on screen.
-- The Allow and Refuse buttons use the same code as those runs but have not been clicked. Sending a second message and interrupting were only run while the tool was signed out, when every request came back as a sign-in error.
+- A person drove one session from the window on Windows, on Haiku, in a scratch folder: start, allow a file edit, send a second message, refuse a shell command, further messages, pause and resume, and stop. The amber question box, the "needs you" chip, the map with its waiting ring, and the ended notice all showed as intended, and the session appeared once in the list. The file was edited when allowed and left alone when refused.
+- Interrupt has not had a fair test with a signed-in session: the reply it was tried on finished within two seconds. The agent took a refusal with no reason for a permission setting; the wording was changed afterwards and that change has not been seen in a session.
 
 **Timeline**
 
