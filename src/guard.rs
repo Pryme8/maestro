@@ -246,6 +246,19 @@ mod tests {
     }
 
     #[test]
+    fn no_code_opens_a_link() {
+        // The crate that opens links has a known flaw that the build cannot
+        // yet take the fix for. It is passed in .cargo/audit.toml on the
+        // ground that Maestro never opens a link. This holds that ground.
+        for (name, text) in sources() {
+            let text = code(&text);
+            for call in ["hyperlink", "open_url", "OpenUrl"] {
+                assert!(!text.contains(call), "{name} opens a link through {call}.{HOW}");
+            }
+        }
+    }
+
+    #[test]
     fn the_crates_are_the_listed_ones_and_come_from_the_public_registry() {
         let manifest = std::fs::read_to_string(root().join("Cargo.toml")).unwrap();
         let mut section = String::new();

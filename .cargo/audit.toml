@@ -1,0 +1,19 @@
+# Known flaws in crates that `cargo audit` is told to pass, each with the
+# reason it cannot reach a user and what would let the entry be removed.
+# Adding a line here is a security change. See SECURITY.md.
+
+[advisories]
+ignore = [
+    # webbrowser 1.1.0: on Unix, the BROWSER variable can inject arguments when
+    # a link is opened. Maestro never opens a link, and a test in src/guard.rs
+    # fails if code that does is added. The fixed version, 1.2.2, needs Rust
+    # 1.85; Maestro builds with 1.84. Remove when the toolchain moves up.
+    "RUSTSEC-2026-0257",
+
+    # quick-xml 0.30.0: slow or memory-hungry on hostile XML. It is used only
+    # while compiling, by zbus-lockstep, to read XML files that ship inside
+    # the Linux accessibility crates. It parses nothing while Maestro runs.
+    # Remove when eframe's Linux accessibility crates move to quick-xml 0.41.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]

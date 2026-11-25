@@ -6,6 +6,7 @@
 /.github/            @Pryme8
 /Cargo.toml          @Pryme8
 /Cargo.lock          @Pryme8
+/.cargo/             @Pryme8
 /scripts/            @Pryme8
 /SECURITY.md         @Pryme8
 /AGENTS.md           @Pryme8

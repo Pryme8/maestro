@@ -285,8 +285,10 @@ impl Environment {
             return Err(format!("{} already exists.", path.display()));
         }
         let path = path.to_string_lossy().to_string();
-        let top = self.git(&repo, &["rev-parse", "--show-toplevel"])?;
-        if norm(&top) != norm(&self.place(&repo)?) {
+        // Git says how far below the top the folder is; nothing means it is the
+        // top. Comparing the two paths as text went wrong on Windows when one
+        // was in its short form, such as C:\Users\RUNNER~1.
+        if !self.git(&repo, &["rev-parse", "--show-prefix"])?.trim().is_empty() {
             return Err(format!("{repo} is inside a repository but is not its top folder."));
         }
         let base = self
