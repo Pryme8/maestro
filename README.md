@@ -57,7 +57,7 @@ Not there yet: graphics load, hostnames and locations for connections, signature
 
 What has been tested: pause, resume, end, the locks and resume-on-close were run against a throwaway process, and the planning and script-building logic has unit tests. The network block and adapter switch need Windows' permission prompt and have not been run yet. The buttons have been seen on screen but not clicked through by a person. The agent recogniser was run on a machine with Claude Code, the Claude app, Copilot and Ollama; the other agents' rules are untested. The usage receiver was tested with a sample report, not yet with a real agent. The timeline, events and log book were seen on screen with a few minutes of real data; the ledger has only been seen empty, and its sums are covered by a unit test.
 
-Two known problems, both there before phase 4 and not yet fixed. A running copy of Maestro has been seen to close by itself when a second copy started with `--screenshot` finishes, in roughly one run in six; the cause is not found. And when every processor core is busy, one sample can take two or three seconds instead of about 16 ms; giving the sampling thread a higher priority is the likely fix and has not been tried.
+One known problem, there before phase 4 and not yet fixed: when every processor core is busy, one sample can take two or three seconds instead of about 16 ms. Giving the sampling thread a higher priority is the likely fix and has not been tried.
 
 ## Build and run
 
