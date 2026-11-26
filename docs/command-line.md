@@ -29,6 +29,7 @@ On Windows the release program has no console of its own. It prints into the ter
 | Flag | Does |
 |---|---|
 | `--dump` | Prints one sample of the machine as JSON |
+| `--gpu` | Prints the graphics cards and the 15 processes using them most |
 | `--profile` | Times each part of a sample, three rounds, to show what the monitor itself costs |
 | `--connections` | Lists who each program is connected to and which ports are listening. Waits up to twenty seconds for names |
 | `--no-names` | With `--connections`, skips looking names up |
@@ -60,7 +61,7 @@ These follow the same locks as the buttons: see [Controls](controls.md#guard-rai
 | `--logins` | Lists the named sign-ins, whether each is ready, and its folder |
 | `--login-add <name> [--key-var <VARIABLE>]` | Adds a sign-in with its own folder, or one that takes an API key from that variable |
 | `--login-forget <name>` | Takes a sign-in off the list and leaves its folder in place |
-| `--run <folder> "<request>" --answer allow\|refuse` | The same, but it asks before each step that needs permission and every question gets that answer |
+| `--run <folder> "<request>" --answer allow\|refuse\|session` | The same, but it asks before each step that needs permission and every question gets that answer. `session` gives a standing yes for each kind of step the first time it comes up |
 
 See [Agents](agents.md) and [Live](live.md).
 

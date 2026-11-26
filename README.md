@@ -26,7 +26,7 @@ Maestro is that agent-centric environment. It runs on top of your existing opera
 
 | | |
 |---|---|
-| **[Base](docs/base.md)** | Processor, memory, disks and network every second. Every process, grouped by program, with the file behind it and what started it. Four views of the same data: tiles, a heat map, a tree and a map. Each process sorted as critical, part of the system, background service or app, and stale programs flagged. |
+| **[Base](docs/base.md)** | Processor, memory, disks, network and graphics every second. Every process, grouped by program, with the file behind it and what started it. Four views of the same data: tiles, a heat map, a tree and a map. Each process sorted as critical, part of the system, background service or app, and stale programs flagged. |
 | **[Controls](docs/controls.md)** | Pause, resume and end a program or everything it started. Clear the machine for a task, with a preview and saved profiles. Block a program on the network and switch an adapter off. An action log with undo. Critical processes are locked, and nothing is ever left frozen. |
 | **[Network](docs/network.md)** | Every connection under the program that opened it, with the name and owner behind each address, and every listening port with whether other computers can reach it. |
 | **[Agents](docs/agents.md)** | Claude Code, Cursor, Codex, Copilot, Gemini CLI, Ollama and others recognised by themselves, with the helpers they start counted in. Usage reports, daily budgets and quests. |
@@ -35,7 +35,7 @@ Maestro is that agent-centric environment. It runs on top of your existing opera
 | **[Router](docs/router.md)** | A ledger of your AI accounts and an advisor that proposes the cheapest route for a task. The relay that would run a route only prints its plan. |
 | **[Managed environment](docs/environment.md)** | From the command line: recorded folders, git worktrees with snapshots and rollback. It does not isolate anything yet. |
 
-Not there yet: running a relay, the isolated image, graphics load, how much each connection carries, signature checks, hardware controls, and stopping an agent automatically when its budget runs out.
+Not there yet: running a relay, the isolated image, how much each connection carries, signature checks, hardware controls, and stopping an agent automatically when its budget runs out.
 
 ## Get it
 

@@ -14,13 +14,13 @@ Across the top are panels for each part of the machine, updated every second:
 | Stores | Memory in use |
 | Docks | Each disk and how full it is |
 | Comms | Download and upload, and each network adapter. Click an adapter for its [actions](controls.md#switch-a-network-adapter-off) |
-| Forge | Graphics. Not read yet: graphics load and memory are not part of this build |
+| Forge | Graphics: the busiest card's load, the memory in use on the card out of its total, and the three programs using it most. See [Graphics](#graphics) |
 
 ## Everything running
 
 Below the panels is every process on the machine, grouped by program. For each program Maestro shows its processor share, memory, disk writes, how many network sockets it has open, the file on disk behind it, and what started it.
 
-You can filter by name, sort by sockets, memory or processor, and filter by kind.
+You can filter by name, sort by sockets, graphics, memory or processor, and filter by kind.
 
 ### Four views of the same data
 
@@ -52,6 +52,18 @@ Each operating system has its own rules for this: Windows, Linux and macOS each 
 - **Cold:** none of the program's processes has used the processor or the disk for 15 minutes. Maestro shows for how long. Counted on every system.
 
 The Stale filter lists both so you can end them one by one. Cold is only counted while Maestro runs, and it is a hint: a program waiting quietly for you looks the same as a forgotten one.
+
+## Graphics
+
+The Forge panel shows the busiest graphics card. Each program's details have a Graphics column, for its share of the card's load, and an "On the card" column, for the memory it holds there. Programs can be sorted by graphics load.
+
+| System | What is read | State |
+|---|---|---|
+| Windows | Load and memory for each card and each program, from the system's own performance counters, the ones Task Manager shows. The card's name and size come from DXGI. No extra software is needed, and it works with any maker's card | Seen working on one Windows 11 machine with one NVIDIA card |
+| Linux | The card's load and memory, where the driver publishes them under `/sys` (AMD and some Intel). Nothing per program | Written, never run |
+| macOS | Nothing | Not built |
+
+Windows sometimes reports more memory for one process than the whole card has in use. Maestro leaves that figure out and shows "not known".
 
 ## A program's details
 

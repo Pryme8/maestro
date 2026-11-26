@@ -65,9 +65,20 @@ A session started from Maestro asks before every step that needs permission, suc
 
 - The box shows the tool, the exact command or file, what the tool says it is for and why it has to ask. Hover the command for the whole call.
 - **Allow this once** lets that one step go ahead exactly as shown. The next step is asked again.
+- **Allow … for this session**, where the button names the kind of step, lets that step go ahead, and every later step of the same kind without asking. See [A standing yes](#a-standing-yes).
 - **Refuse** stops the step. Anything typed in the reason box goes back to the agent, so it can try another way.
 
-When you start a session you choose one of three settings: ask each time, let file edits through and ask about everything else, or refuse everything so it can only read and search. Allowing a kind of step for the rest of a session, and changing a step before allowing it, are not built.
+When you start a session you choose one of three settings: ask each time, let file edits through and ask about everything else, or refuse everything so it can only read and search. Changing a step before allowing it is not built.
+
+### A standing yes
+
+A standing yes lasts until the session ends or you take it back. The line "Allowed without asking, for this session:" above the questions lists each one, with **take back** beside it. Steps it covers show in the list as going ahead under your standing yes.
+
+The kinds are narrow on purpose:
+
+- **A command:** one program plus its first word, such as `cargo test`, and only when the step is a single plain command. Anything chained, piped, redirected, substituted or starting with a variable is asked every time, because a standing yes could not say what the rest of the line does. The button is greyed for those, with the reason on hover.
+- **Edit, Write, MultiEdit and NotebookEdit:** only files inside the session's folder.
+- **Any other tool:** the tool as a whole.
 
 ## More than one account
 
@@ -114,6 +125,6 @@ A program started from the macOS Finder or Dock does not get the `PATH` your ter
 - `--logins` lists the named sign-ins and whether each is ready. `--login-add <name>` adds one, with `--key-var <VARIABLE>` for one that uses an API key, and `--login-forget <name>` takes one off the list.
 - `--run <folder> "<request>" --safe` runs in a safe copy as above, then prints what changed and the `--work-rollback` line that undoes it.
 - `--run` takes `--as <name>` to run under a named sign-in and `--model <name>` to pick the model.
-- `--run <folder> "<request>"` starts Claude Code in that folder, read-only, and prints each step until it answers. Add `--answer refuse` or `--answer allow` to have it ask before each step that needs permission and give every question that same answer. `--answer allow` lets it change files and run commands unasked, so use it only in a folder you can throw away.
+- `--run <folder> "<request>"` starts Claude Code in that folder, read-only, and prints each step until it answers. Add `--answer refuse` or `--answer allow` to have it ask before each step that needs permission and give every question that same answer. `--answer session` gives a standing yes the first time each kind of step comes up, and allows once where none can be given. `--answer allow` lets it change files and run commands unasked, so use it only in a folder you can throw away.
 
 If your Claude Code session files are somewhere else, set `MAESTRO_CLAUDE_DIR` to the folder that holds them.

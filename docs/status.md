@@ -11,6 +11,7 @@ Maestro is early. This page says plainly what works on each system and what has 
 | Pause, resume, end, and the locks | yes | written, never run | yes, run against a throwaway process |
 | Finds agents | yes | written, never run | yes, one agent tried |
 | The window | yes | not tried | not seen: the test machine has no EGL or xkbcommon-x11 library, so it could not open |
+| Graphics load and memory | yes, one machine with one NVIDIA card | not read | the card only, where the driver publishes it; never run |
 | Not-responding check | written, not seen working | not built | not built |
 | Switch an adapter off | written, not run | written, never run (system password prompt) | written, not run (asks through polkit) |
 | Block one program on the network | written, not run | not built | not built |
@@ -45,6 +46,10 @@ Blocking one program on Linux takes a control group for the program and an nftab
 - The buttons have been seen on screen but not clicked through by a person. The Base page, with the profile row, was seen on screen with real data.
 - Profiles and family actions have unit tests for what they would act on and have not been clicked through.
 
+**Graphics**
+
+- Read from the command line on one Windows 11 machine with one NVIDIA card. The Forge panel and the new columns have not been looked at in the window.
+
 **Stale programs**
 
 - The cold count has unit tests.
@@ -70,6 +75,7 @@ Blocking one program on Linux takes a control group for the program and an nftab
 - Named sign-ins were run from the command line on Windows in a scratch data folder: adding, refusing a name that would share a folder, listing with states, and starting runs. A run under a sign-in that had never been signed in came back as not logged in while Claude Code's own sign-in stayed signed in, which shows the two are kept apart. A run under a key sign-in whose variable was not set was refused before anything started. Signing a second account in, and a run under it, have not been done: that takes a second account. The sign-in list and picker on the Live page have not been seen on screen.
 - A person drove one session from the window on Windows, on Haiku, in a scratch folder: start, allow a file edit, send a second message, refuse a shell command, further messages, pause and resume, and stop. The amber question box, the "needs you" chip, the map with its waiting ring, and the ended notice all showed as intended, and the session appeared once in the list. The file was edited when allowed and left alone when refused.
 - Interrupt has not had a fair test with a signed-in session: the reply it was tried on finished within two seconds. The agent took a refusal with no reason for a permission setting; the wording was changed afterwards and that change has not been seen in a session.
+- A standing yes was proven by one real run from the command line with `--answer session`: a second file write went through unasked, and a chained command was asked again. The button for it has not been clicked in the window.
 - Safe copies have unit tests for preparing one, listing its changes and rolling it back. One real Haiku session was run from the command line on Windows with `--safe`: it edited a file and made a new one in the copy, the user's own checkout was untouched, both changes were listed, and the rollback restored the copy. The buttons for this on the page have not been clicked.
 
 **Timeline**
@@ -94,4 +100,4 @@ Blocking one program on Linux takes a control group for the program and an nftab
 
 ## Not built yet
 
-Running a relay, the isolated image, snapshots of the whole image, a page for the environment in the window, graphics load, how much each connection carries, locations for connections, signature checks, hardware controls, and stopping an agent automatically when its budget runs out. The [plan](plan.md) gives the order.
+Running a relay, the isolated image, snapshots of the whole image, a page for the environment in the window, how much each connection carries, locations for connections, signature checks, hardware controls, and stopping an agent automatically when its budget runs out. The [plan](plan.md) gives the order.
