@@ -20,6 +20,7 @@ On Windows the release program has no console of its own. It prints into the ter
 | `--view <tiles\|heat\|tree\|mold>` | Opens on that view of the [Base](base.md) page |
 | `--page <base\|timeline\|network\|live\|router>` | Opens on that page |
 | `--select <program>` | Opens with that program's details showing |
+| `--optimize-report` | Prints the report the Optimize page would send to an agent. Sends nothing |
 | `--preview-focus` | With `--select`, also opens its clear-the-machine preview. Changes nothing |
 | `--screenshot <file.png>` | Opens the window, saves one picture of it and exits |
 | `--tour <folder>` | Opens the window once, saves a picture of each page into the folder and closes. The pictures show your running programs, so check them before sharing |

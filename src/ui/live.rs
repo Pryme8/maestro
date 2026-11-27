@@ -268,7 +268,7 @@ fn step_row(ui: &mut Ui, now: u64, step: &Step) {
             format!("{}{}", cost.map(|c| format!("${c:.4}  ")).unwrap_or_default(), clip(text, 300)),
             Some(text),
         ),
-        What::Finished { ok: false, text, .. } => ("error", RED, text.clone(), None),
+        What::Finished { ok: false, text, .. } => ("error", RED, clip(text, 2000), None),
         What::NeedsYou { tool, detail } => ("asks", AMBER, format!("May it use {tool}?  {}", clip(detail, 150)), Some(detail)),
         What::Decided { tool, allowed: true, standing: true } => {
             ("allowed", TEAL, format!("{tool} went ahead under your standing yes."), None)
@@ -1125,6 +1125,41 @@ impl LiveUi {
             checking.store(false, Ordering::Relaxed);
             ctx.request_repaint();
         });
+    }
+
+    /// Whether an agent can be started for a job that is not on this page, and if not, why.
+    pub(super) fn agent_block(&self) -> Option<String> {
+        if self.services.lock().map_or(true, |list| list.is_empty()) {
+            return Some("Still checking which agents are ready.".to_string());
+        }
+        self.claude_block().map(|why| {
+            format!(
+                "No agent is ready to do this. {} Activate one under Services on the Live page.",
+                why.replace(" See Services above.", "")
+            )
+        })
+    }
+
+    /// Start a session that may only read and answer, under the sign-in chosen on this page.
+    pub(super) fn start_advice(
+        &self,
+        folder: &std::path::Path,
+        prompt: &str,
+        model: &str,
+        wake: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Run, String> {
+        let who = self.login.as_deref().and_then(|name| crate::logins::Logins::load().find(name).cloned());
+        Run::start(self.feed.clone(), folder, prompt, Leave::ReadOnly, model, who.as_ref(), wake)
+    }
+
+    /// The answer a session finished with, if it has: whether it went well, its cost and its words.
+    pub(super) fn answer_of(&self, id: &str) -> Option<(bool, Option<f64>, String)> {
+        let feed = self.feed.lock().ok()?;
+        let session = feed.sessions.iter().find(|s| s.id == id)?;
+        session.steps.iter().rev().find_map(|step| match &step.what {
+            What::Finished { ok, cost, text } => Some((*ok, *cost, text.clone())),
+            _ => None,
+        })
     }
 
     /// Whether Claude Code can be started, and if not, why.

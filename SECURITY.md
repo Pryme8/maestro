@@ -23,6 +23,10 @@ These are the rules the code keeps today. A change that breaks one is a security
 7. **An agent is refused unless you allow it.** When a session asks to do something, no answer and a closed window both mean no.
 8. **It builds only from the public crate registry**, from versions fixed in `Cargo.lock`, with no build script.
 
+## Optimize
+
+The Optimize page hands a report on the machine to an agent you are signed in to, which is the one time Maestro's own data leaves the computer, and it goes only when you click **Run the analysis**. The report is shown first. It holds hardware, firmware and driver versions, settings and program names, and lines naming a user, a computer or a serial number are taken out. The agent runs in an empty folder with every step that needs permission refused, so it can advise and nothing else. The rules it is given are in `RULES` in [src/optimize.rs](src/optimize.rs); a change to them changes what every user is advised to do, and should be reviewed as a security change.
+
 ## How changes are checked
 
 Rules 1, 3, 4, 5 and 8 are checked by tests in [src/guard.rs](src/guard.rs), which run with `cargo test` and on every pull request. Each sensitive thing the code does is on a list in that file: every program it starts, every command line built from text, every use of the network, every file with `unsafe` code, every crate. The tests fail when the code and its list differ.

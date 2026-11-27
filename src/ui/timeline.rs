@@ -15,6 +15,7 @@ pub enum Page {
     Network,
     Live,
     Router,
+    Optimize,
 }
 
 impl Page {
@@ -25,6 +26,7 @@ impl Page {
             "network" => Some(Page::Network),
             "live" => Some(Page::Live),
             "router" => Some(Page::Router),
+            "optimize" => Some(Page::Optimize),
             _ => None,
         }
     }

@@ -31,6 +31,7 @@ mod history;
 mod live;
 mod logins;
 mod netmap;
+mod optimize;
 mod paths;
 mod preview;
 mod receiver;
@@ -159,6 +160,12 @@ fn main() -> eframe::Result<()> {
     // `--gpu` prints each graphics card and the programs using it.
     if args.iter().any(|a| a == "--gpu") {
         gpu::print();
+        return Ok(());
+    }
+
+    // `--optimize-report` prints the report an analysis would send. Nothing is sent.
+    if args.iter().any(|a| a == "--optimize-report") {
+        optimize::print_report();
         return Ok(());
     }
 

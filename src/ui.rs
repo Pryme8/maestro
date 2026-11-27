@@ -6,6 +6,7 @@ mod controls;
 mod crew;
 mod live;
 mod network;
+mod optimize;
 mod router;
 mod timeline;
 mod views;
@@ -112,6 +113,8 @@ pub struct App {
     net: network::NetUi,
     /// What agent sessions are doing, and the runs started from here.
     lv: live::LiveUi,
+    /// The Optimize page: the machine's report and what an agent made of it.
+    op: optimize::OptimizeUi,
     /// When each process was last busy, kept by the sampling thread.
     stale: Arc<Mutex<crate::stale::Tracker>>,
     /// Show only programs flagged as not responding or cold.
@@ -218,6 +221,7 @@ impl App {
             names,
             net: network::NetUi::new(),
             lv: live::LiveUi::start(&cc.egui_ctx, prefill),
+            op: Default::default(),
             stale,
             only_stale: false,
             shot: screenshot.map(|path| Shot {
@@ -353,7 +357,7 @@ impl eframe::App for App {
         }
         let found = self.crew.recogniser.find(&snap);
         self.keep_history(&found);
-        hud(ctx, &snap, groups.len(), &mut self.page);
+        hud(ctx, &snap, groups.len(), &mut self.page, self.lv.agent_block());
         self.action_log(ctx);
 
         if let Some(name) = self.selected.clone() {
@@ -397,6 +401,7 @@ impl eframe::App for App {
                     Page::Network => self.network_ui(ui, &snap),
                     Page::Live => self.live_ui(ui),
                     Page::Router => self.router_ui(ui),
+                    Page::Optimize => self.optimize_ui(ui, &snap, &groups),
                 });
         });
 
@@ -417,7 +422,7 @@ fn apply_style(ctx: &egui::Context) {
     ctx.set_visuals(visuals);
 }
 
-fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize, page: &mut Page) {
+fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize, page: &mut Page, no_agent: Option<String>) {
     egui::TopBottomPanel::top("hud")
         .frame(
             egui::Frame::new()
@@ -439,6 +444,25 @@ fn hud(ctx: &egui::Context, snap: &Snapshot, programs: usize, page: &mut Page) {
                     .on_hover_text("What each agent is doing, step by step, and sessions you direct from here.");
                 ui.selectable_value(page, Page::Router, "Router")
                     .on_hover_text("Your AI accounts, and the cheapest way to do a task with them.");
+                ui.add_space(8.0);
+                // Optimize needs an agent to do the reading, so it is greyed until one is ready.
+                let on = *page == Page::Optimize;
+                let text = RichText::new("Optimize").strong().color(if on { BG } else { TEAL });
+                let button = egui::Button::new(text)
+                    .fill(if on { TEAL } else { PANEL_HI })
+                    .stroke(Stroke::new(1.0, TEAL));
+                if ui
+                    .add_enabled(no_agent.is_none() || on, button)
+                    .on_hover_text(
+                        "Gathers a report on this machine: firmware, drivers, settings, and stale or heavy \
+                         programs. An agent then reads it and advises. Nothing is sent until you say so, \
+                         and nothing is changed.",
+                    )
+                    .on_disabled_hover_text(no_agent.unwrap_or_default())
+                    .clicked()
+                {
+                    *page = Page::Optimize;
+                }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let os = format!(
                         "{} {}",

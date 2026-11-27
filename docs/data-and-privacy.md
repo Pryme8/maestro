@@ -27,6 +27,7 @@ The files are plain JSON you can read. Delete the folder to forget everything.
 - **Network sockets:** which process owns each one, and the remote address and port. Not the contents of any traffic.
 - **Claude Code's session files,** on the [Live](live.md) page and with `--watch`. These hold your conversations with the agent. Maestro shows their steps and holds them in memory only: they are not copied into Maestro's own files.
 - **Pictures in a session's folder,** only while **Show what it is making** is ticked on the [Live](live.md) page. The picture is held in memory to be shown and is not copied anywhere.
+- **Firmware, drivers and settings,** when you open the [Optimize](optimize.md) page. On Windows one fixed PowerShell script asks the system; on Linux they are files the kernel keeps. The report is sent to the agent only when you click **Run the analysis**, and is shown to you first.
 - **Whether a key is set** for each agent tool. Maestro checks that a key exists and never shows or stores it. For a sign-in that uses a key, Maestro reads the key from the variable you named at the moment a session starts and hands it to Claude Code. It is not written down or shown.
 
 ## What leaves your computer

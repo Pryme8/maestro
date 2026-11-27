@@ -213,7 +213,8 @@ pub fn parse_claude(line: &str, now_ms: u64) -> Option<Parsed> {
         "result" => push(What::Finished {
             ok: !flag("is_error"),
             cost: v.get("total_cost_usd").and_then(Value::as_f64),
-            text: clip(v.get("result").and_then(Value::as_str).unwrap_or(""), 2000),
+            // Kept nearly whole: an answer can be a list that something else reads.
+            text: clip(v.get("result").and_then(Value::as_str).unwrap_or(""), 40_000),
         }),
         "custom-title" => out.title = text_of("customTitle"),
         _ => {}
