@@ -65,7 +65,7 @@
   <h1>The resource manager,<br><em>rebuilt for agents.</em></h1>
   <p class="lede">Maestro shows everything running on your computer, shuts down whatever the task in hand does not need, and gives you one place to watch and direct the AI agents doing the work.</p>
   <div class="cta">
-    <a class="btn" href="#get">Build it from source</a>
+    <a class="btn" href="#get">Download 0.1.0</a>
     <a class="btn outline" href="https://github.com/Pryme8/maestro/blob/main/docs/README.md">Read the documentation</a>
   </div>
   <ul class="facts">
@@ -244,14 +244,14 @@
 <section id="status" class="status">
   <p class="label">STATUS</p>
   <h2>Early, and exact about it.</h2>
-  <p class="sub">There is no released download yet. Here is where each system stands today.</p>
+  <p class="sub">The first release, <a href="https://github.com/Pryme8/maestro/releases/tag/v0.1.0">0.1.0</a>, is out. Here is where each system stands today.</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th></th><th>Windows 11</th><th>Linux</th><th>macOS</th></tr></thead>
       <tbody>
-        <tr><th>Builds and passes its tests</th><td class="y">yes</td><td class="y">yes</td><td class="n">not tried</td></tr>
+        <tr><th>Builds and passes its tests</th><td class="y">yes</td><td class="y">yes</td><td class="y">yes, on GitHub's Mac</td></tr>
         <tr><th>Reads the machine; pause, resume, end</th><td class="y">yes</td><td class="y">yes, from the command line</td><td class="n">written, never run</td></tr>
-        <tr><th>The window</th><td class="y">yes</td><td class="n">not seen yet</td><td class="n">not tried</td></tr>
+        <tr><th>The window</th><td class="y">yes</td><td class="n">not seen yet</td><td class="n">never opened</td></tr>
         <tr><th>Follow and direct Claude Code</th><td class="y">yes</td><td class="n">not tried</td><td class="n">written, never run</td></tr>
         <tr><th>Start and follow Cursor's agent</th><td class="y">yes, from the command line</td><td class="n">not tried</td><td class="n">not tried</td></tr>
         <tr><th>Gather the Optimize report</th><td class="y">yes</td><td class="n">written, not run</td><td class="n">written, never run</td></tr>
@@ -264,8 +264,27 @@
 
 <section id="get" class="get">
   <p class="label">GET IT</p>
-  <h2>Three lines to a running base.</h2>
-  <p class="sub">Built from source for now. You need a <a href="https://rustup.rs">Rust toolchain</a>, version 1.84 or newer. Linux needs a few packages first: see the <a href="https://github.com/Pryme8/maestro/blob/main/docs/install.md">install guide</a>.</p>
+  <h2>Download it, unpack it, run it.</h2>
+  <p class="sub">Release 0.1.0. One program, no installer, no account. Each file's state is said beside it.</p>
+  <div class="grid three">
+    <a class="card link" href="https://github.com/Pryme8/maestro/releases/download/v0.1.0/maestro-0.1.0-windows-x64.zip">
+      <h3>Windows 11</h3>
+      <p>The system Maestro is built and used on. Unpack anywhere and run <code>maestro.exe</code>.</p>
+      <span>maestro-0.1.0-windows-x64.zip ↓</span>
+    </a>
+    <a class="card link" href="https://github.com/Pryme8/maestro/releases/download/v0.1.0/maestro-0.1.0-linux-x64.tar.gz">
+      <h3>Linux</h3>
+      <p>Builds and passes its tests. Its window has not been seen by a person yet. Unpack and run <code>./maestro</code>.</p>
+      <span>maestro-0.1.0-linux-x64.tar.gz ↓</span>
+    </a>
+    <a class="card link" href="https://github.com/Pryme8/maestro/releases/download/v0.1.0/maestro-0.1.0-macos-universal.zip">
+      <h3>macOS <small>experimental</small></h3>
+      <p>It built and passed its tests for the first time with this release. Nobody has opened it on a Mac yet.</p>
+      <span>maestro-0.1.0-macos-universal.zip ↓</span>
+    </a>
+  </div>
+  <p class="fine">The downloads are not signed yet, so Windows and macOS warn the first time you open one. The <a href="https://github.com/Pryme8/maestro/blob/main/docs/install.md#the-downloads-are-not-signed-yet">install guide</a> says how to get past it. Check your file against <a href="https://github.com/Pryme8/maestro/releases/download/v0.1.0/SHA256SUMS.txt">SHA256SUMS.txt</a>. Everything is on the <a href="https://github.com/Pryme8/maestro/releases/tag/v0.1.0">release page</a>.</p>
+  <p class="sub tight">Or build it from source. You need a <a href="https://rustup.rs">Rust toolchain</a>, version 1.84 or newer. Linux needs a few packages first: see the <a href="https://github.com/Pryme8/maestro/blob/main/docs/install.md">install guide</a>.</p>
   <div class="term">
     <div class="chrome"><i></i><i></i><i></i><span>terminal</span><button class="copy" type="button" data-copy="git clone https://github.com/Pryme8/maestro.git&#10;cd maestro&#10;cargo run --release">Copy</button></div>
 <pre><code><span class="p">$</span> git clone https://github.com/Pryme8/maestro.git
@@ -292,7 +311,7 @@
     </a>
     <a class="card link" href="https://github.com/Pryme8/maestro/blob/main/docs/status.md#macos">
       <h3>Own a Mac?</h3>
-      <p>The macOS code was written from documentation and has never been compiled. A report of what happens when you build it is one of the most useful things you can send.</p>
+      <p>The macOS code was written from documentation. It now builds and passes its tests, and nobody has opened it on a Mac. A report of what happens when you run it is one of the most useful things you can send.</p>
       <span>macOS status →</span>
     </a>
     <a class="card link" href="https://github.com/Pryme8/maestro/blob/main/AGENTS.md">

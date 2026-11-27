@@ -161,6 +161,9 @@ section { padding: clamp(64px, 10vw, 130px) clamp(16px, 5vw, 56px); max-width: 1
 .card.link { text-decoration: none; color: inherit; }
 .card.link:hover { transform: translateY(-3px); }
 .card.link span { margin-top: auto; font: 0.86rem var(--mono); color: var(--teal); }
+.card.link span { overflow-wrap: anywhere; }
+.card small { font: 600 0.66rem var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--amber); border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent); padding: 2px 7px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
+.get .grid { margin-bottom: 22px; }
 
 /* Live */
 .live .shot { margin-top: 48px; }
