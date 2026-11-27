@@ -20,7 +20,7 @@ Maestro is early. This page says plainly what works on each system and what has 
 
 ### macOS
 
-The macOS code was written from documentation. Nothing in it has been compiled or run, because the project has had no Mac to try it on. The release build compiles it on a Mac for the first time, and is set up so that a failure there does not hold back the Windows and Linux downloads. Until someone has run it on a Mac, treat a macOS download as untested.
+The macOS code was written from documentation, because the project has had no Mac to try it on. It compiled and passed its unit tests for the first time on GitHub's Mac when release 0.1.0 was built on 2026-11-27. Nobody has opened the app on a Mac. The release build is set up so that a failure there does not hold back the Windows and Linux downloads. Until someone has run it on a Mac, treat a macOS download as untested.
 
 Known ahead of time:
 
@@ -63,7 +63,7 @@ Blocking one program on Linux takes a control group for the program and an nftab
 **Optimize**
 
 - The report was gathered for real on Windows with `--optimize-report`: firmware, board, memory, drives, drivers, problem devices, power plan and start-up programs all read, in about 15 seconds. The Linux and macOS readers compile and have not been run.
-- Reading the agent's answer has unit tests. The page has not been seen on screen, and no analysis has been run by a real agent yet.
+- Reading the agent's answer has unit tests. One analysis was run for real from the page on Windows, read by Claude Code: the agent answered with the list in the form asked for, its first finding being memory running below its rated speed. The maintainer saw the page; what it drew has not been checked against the answer.
 
 **Setup guides**
 
