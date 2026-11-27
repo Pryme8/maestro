@@ -230,6 +230,8 @@ pub struct Session {
     pub ours: bool,
     pub steps: VecDeque<Step>,
     pub last_ms: u64,
+    /// The time of the earliest step seen.
+    pub first_ms: u64,
     /// How often each tool has been called, in the steps seen.
     pub tool_counts: HashMap<String, u32>,
     /// Tool calls not yet answered, by call id.
@@ -249,6 +251,7 @@ impl Session {
             ours,
             steps: VecDeque::new(),
             last_ms: 0,
+            first_ms: 0,
             tool_counts: HashMap::new(),
             calls: HashMap::new(),
             asks: Vec::new(),
@@ -310,6 +313,9 @@ impl Feed {
                 _ => {}
             }
             session.last_ms = session.last_ms.max(step.at_ms);
+            if session.first_ms == 0 || step.at_ms < session.first_ms {
+                session.first_ms = step.at_ms;
+            }
             session.steps.push_back(step);
             if session.steps.len() > STEPS_KEPT {
                 session.steps.pop_front();

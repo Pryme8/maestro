@@ -32,6 +32,7 @@ mod live;
 mod logins;
 mod netmap;
 mod paths;
+mod preview;
 mod receiver;
 mod router;
 mod safe;
@@ -158,6 +159,14 @@ fn main() -> eframe::Result<()> {
     // `--gpu` prints each graphics card and the programs using it.
     if args.iter().any(|a| a == "--gpu") {
         gpu::print();
+        return Ok(());
+    }
+
+    // `--preview <folder> [minutes]` lists the pictures changed in a folder lately.
+    if let Some(folder) = arg_after(&args, "--preview") {
+        let at = args.iter().position(|a| a == "--preview").unwrap_or(0);
+        let minutes = args.get(at + 2).and_then(|m| m.parse().ok()).unwrap_or(60);
+        preview::print(folder, minutes);
         return Ok(());
     }
 

@@ -42,6 +42,18 @@ pub(super) struct LiveUi {
     /// Each agent tool and whether it can be used.
     services: Arc<Mutex<Vec<Service>>>,
     checking: Arc<AtomicBool>,
+    /// Show the pictures the selected session writes. Off unless asked for.
+    preview_on: bool,
+    preview: Option<Preview>,
+}
+
+/// The preview of one session's folder. Dropping it stops the watching
+/// thread and frees the picture.
+struct Preview {
+    session: String,
+    folder: String,
+    watch: crate::preview::Watch,
+    showing: Option<(crate::preview::Made, egui::TextureHandle, (u32, u32))>,
 }
 
 struct Attached {
@@ -109,6 +121,8 @@ impl LiveUi {
             show_map: false,
             services: Arc::default(),
             checking: Arc::default(),
+            preview_on: false,
+            preview: None,
         };
         if let Some((folder, prompt)) = prefill {
             ui.folder = folder;
@@ -118,6 +132,107 @@ impl LiveUi {
         }
         ui.check_services(ctx);
         ui
+    }
+}
+
+impl LiveUi {
+    /// The switch for the preview, and the picture when it is on.
+    fn preview_ui(&mut self, ui: &mut Ui, now: u64, session: &live::Session) {
+        ui.checkbox(&mut self.preview_on, "Show what it is making").on_hover_text(
+            "Looks in the session's folder every second or two for pictures written since its first \
+             step shown here, and shows the newest as it changes. PNG, JPEG, GIF (first frame), BMP \
+             and WebP. Off, it reads nothing and holds no memory; on, it holds one picture of at most \
+             about 6 MB.",
+        );
+        if !self.preview_on || session.cwd.is_empty() {
+            self.preview = None;
+            return;
+        }
+        if self.preview.as_ref().is_none_or(|p| p.session != session.id || p.folder != session.cwd) {
+            let wake = ui.ctx().clone();
+            let since = if session.first_ms == 0 { session.last_ms } else { session.first_ms };
+            self.preview = Some(Preview {
+                session: session.id.clone(),
+                folder: session.cwd.clone(),
+                watch: crate::preview::Watch::start(PathBuf::from(&session.cwd), since, move || {
+                    wake.request_repaint()
+                }),
+                showing: None,
+            });
+        }
+        let Some(preview) = self.preview.as_mut() else { return };
+        let (made, cut_short, pick, problem, looked) = {
+            let Ok(mut state) = preview.watch.state.lock() else { return };
+            if let Some((made, picture)) = state.fresh.take() {
+                let image = egui::ColorImage::from_rgba_unmultiplied([picture.width, picture.height], &picture.rgba);
+                let texture = ui.ctx().load_texture("live-preview", image, egui::TextureOptions::LINEAR);
+                preview.showing = Some((made, texture, picture.full));
+            }
+            (state.made.clone(), state.cut_short, state.pick.clone(), state.problem.clone(), state.looked)
+        };
+        // A picture that has gone from the folder is not left on show.
+        if preview.showing.as_ref().is_some_and(|(shown, ..)| !made.iter().any(|m| m.path == shown.path)) {
+            preview.showing = None;
+        }
+        if !looked {
+            ui.label(RichText::new("Looking in the folder…").color(DIM).size(11.0));
+            return;
+        }
+        if made.is_empty() {
+            ui.label(
+                RichText::new("No picture has been written in this folder since the session's first step shown here.")
+                    .color(DIM)
+                    .size(11.0),
+            );
+            return;
+        }
+        let mut choose: Option<Option<PathBuf>> = None;
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .selectable_label(pick.is_none(), RichText::new("newest").size(11.0))
+                .on_hover_text("Always show the picture changed most recently.")
+                .clicked()
+            {
+                choose = Some(None);
+            }
+            for m in &made {
+                let text = RichText::new(format!("{}  ·  {}", clip(&m.name, 40), ago(now, m.changed_ms))).size(11.0);
+                if ui.selectable_label(pick.as_ref() == Some(&m.path), text).on_hover_text(&m.name).clicked() {
+                    choose = Some(Some(m.path.clone()));
+                }
+            }
+        });
+        if let Some(choice) = choose {
+            preview.watch.pick(choice);
+        }
+        if let Some((shown, texture, full)) = &preview.showing {
+            let size = texture.size_vec2();
+            let room = egui::vec2(ui.available_width().min(720.0), 360.0);
+            let scale = (room.x / size.x).min(room.y / size.y).min(1.0);
+            ui.image((texture.id(), size * scale));
+            ui.label(
+                RichText::new(format!(
+                    "{}  ·  {} by {}  ·  {}  ·  changed {}",
+                    shown.name,
+                    full.0,
+                    full.1,
+                    bytes(shown.bytes),
+                    ago(now, shown.changed_ms)
+                ))
+                .color(DIM)
+                .size(11.0),
+            );
+        }
+        if let Some(problem) = problem {
+            ui.label(RichText::new(format!("Cannot be shown yet: {problem}")).color(AMBER).size(11.0));
+        }
+        if cut_short {
+            ui.label(
+                RichText::new("The folder is too large to look through in full, so some pictures may be missing.")
+                    .color(DIM)
+                    .size(11.0),
+            );
+        }
     }
 }
 
@@ -444,6 +559,7 @@ impl App {
             ui.selectable_value(&mut lv.as_map, false, "List");
         });
         ui.label(RichText::new(&session.cwd).monospace().color(DIM).size(11.0));
+        lv.preview_ui(ui, now, session);
 
         // Which tools it has used, most used first.
         let mut counts: Vec<(&String, &u32)> = session.tool_counts.iter().collect();

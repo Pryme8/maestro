@@ -80,6 +80,17 @@ The kinds are narrow on purpose:
 - **Edit, Write, MultiEdit and NotebookEdit:** only files inside the session's folder.
 - **Any other tool:** the tool as a whole.
 
+## Seeing what it is making
+
+Tick **Show what it is making** under a session's name and Maestro shows the pictures the agent writes in its folder, as they change. It works for any session on the page, whether or not it was started here.
+
+- It looks in the session's folder every second or two for PNG, JPEG, GIF, BMP and WebP files changed since the session's first step shown on the page. A GIF shows its first frame.
+- The newest picture is shown, and replaced when a newer one is written or the file changes. Up to eight recent pictures are listed above it; click one to stay on it, or **newest** to follow along again.
+- It is off until you tick it. Off, it reads nothing and holds no memory. On, it holds one picture, scaled down to at most 1280 pixels on its long side, which is about 6 MB at most.
+- It opens picture files only, and only inside the session's folder. Links out of the folder are not followed, hidden folders and `node_modules`, `target`, `venv` and `__pycache__` are skipped, and a file over 64 MB is listed and not opened.
+
+Web pages, video and 3D models are not shown yet. A page needs a browser run without a window to take its picture, which is a new program for Maestro to start; video and models each need a decoder.
+
 ## More than one account
 
 You can keep several sign-ins for Claude Code, such as a work account and a personal one, and choose which one a session runs under when you start it.
@@ -126,5 +137,6 @@ A program started from the macOS Finder or Dock does not get the `PATH` your ter
 - `--run <folder> "<request>" --safe` runs in a safe copy as above, then prints what changed and the `--work-rollback` line that undoes it.
 - `--run` takes `--as <name>` to run under a named sign-in and `--model <name>` to pick the model.
 - `--run <folder> "<request>"` starts Claude Code in that folder, read-only, and prints each step until it answers. Add `--answer refuse` or `--answer allow` to have it ask before each step that needs permission and give every question that same answer. `--answer session` gives a standing yes the first time each kind of step comes up, and allows once where none can be given. `--answer allow` lets it change files and run commands unasked, so use it only in a folder you can throw away.
+- `--preview <folder> [minutes]` lists the pictures changed in a folder in the last hour, or the number of minutes given, with their sizes.
 
 If your Claude Code session files are somewhere else, set `MAESTRO_CLAUDE_DIR` to the folder that holds them.
