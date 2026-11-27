@@ -88,7 +88,15 @@ pub fn find_on_path(command: &str, path: &str, endings: &[&str]) -> Option<PathB
 }
 
 fn find(command: &str) -> Option<PathBuf> {
-    let path = std::env::var("PATH").unwrap_or_default();
+    let mut path = std::env::var("PATH").unwrap_or_default();
+    // Installers for these tools put commands in `.local/bin` under the home
+    // folder. A program already running does not see a path changed since it
+    // started, so that folder is looked in as well.
+    if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
+        let local = PathBuf::from(home).join(".local").join("bin");
+        path.push(if cfg!(windows) { ';' } else { ':' });
+        path.push_str(&local.to_string_lossy());
+    }
     if cfg!(windows) {
         find_on_path(command, &path, &[".exe", ".cmd", ".bat"])
     } else {
@@ -401,6 +409,24 @@ pub fn open_sign_in(command: &str, env: &[(String, std::ffi::OsString)]) -> Resu
     result
         .map(|_| ())
         .map_err(|e| format!("Could not open a terminal. Run `{command}` in one yourself. ({e})"))
+}
+
+/// Open a terminal the user can see and run one setup line in it. The line
+/// is one of the fixed ones in `setup::RUN_LINES`: nothing from outside the
+/// program is ever put into it, and it runs only on the user's click, after
+/// the line itself has been shown.
+pub fn run_setup_line(line: &'static str) -> Result<(), String> {
+    if !crate::setup::RUN_LINES.contains(&line) {
+        return Err("That line is not one Maestro runs.".to_string());
+    }
+    let result = if cfg!(windows) {
+        Command::new("cmd").args(["/c", "start", "Maestro setup", "powershell", "-NoExit", "-Command", line]).spawn()
+    } else if cfg!(target_os = "macos") {
+        Command::new("osascript").args(["-e", &mac_sign_in_script(line, &[])]).spawn()
+    } else {
+        Command::new("x-terminal-emulator").args(["-e", "sh", "-c", line]).spawn()
+    };
+    result.map(|_| ()).map_err(|e| format!("Could not open a terminal. Paste the line into one yourself. ({e})"))
 }
 
 /// What to tell macOS to do: ask Terminal to run the command. Terminal starts

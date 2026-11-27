@@ -31,7 +31,7 @@ mod tests {
         ("optimize.rs", "program", "only \"powershell\" on Windows, or the system profiler and pmset on macOS, each with fixed arguments that only read"),
         ("safe.rs", "\"git\"", "test code only"),
         ("services.rs", "program", "a tool found on the path, asked only for its version or sign-in state"),
-        ("services.rs", "\"cmd\"", "opens a terminal for the tool's own sign-in, on the user's click"),
+        ("services.rs", "\"cmd\"", "opens a terminal for the tool's own sign-in, or for one fixed setup line from setup::RUN_LINES, on the user's click"),
         ("services.rs", "\"osascript\"", "the same on macOS"),
         ("services.rs", "\"x-terminal-emulator\"", "the same on Linux"),
     ];
@@ -159,6 +159,8 @@ mod tests {
         ("environment.rs", "\"bash\"", "asks a WSL distro which of a fixed list of tools it has"),
         ("environment.rs", "\"-lc\"", "the same call"),
         ("optimize.rs", "\"-Command\"", "one fixed script that asks Windows for firmware, drivers and settings; nothing from outside is put into it and it changes nothing"),
+        ("services.rs", "\"-Command\"", "a setup line from the fixed list setup::RUN_LINES, in a terminal the user can see, on their click"),
+        ("services.rs", "\"sh\"", "the same on Linux"),
         ("services.rs", "\"/c\"", "opens a terminal for a sign-in command that is fixed in the code"),
         ("services.rs", "\"/k\"", "the same call"),
         ("services.rs", "\"-e\"", "the same on Linux; on macOS the line also carries the sign-in folder, quoted by mac_sign_in_script"),

@@ -28,15 +28,20 @@ pub struct Step {
     pub link: Option<&'static str>,
     /// A sign-in command Maestro can open a terminal for.
     pub sign_in: Option<&'static str>,
+    /// A line from `RUN_LINES` that Maestro can run in a terminal, on a click.
+    pub run: Option<&'static str>,
 }
 
 impl Step {
     fn new(mark: Mark, title: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self { mark, title: title.into(), detail: detail.into(), command: None, link: None, sign_in: None }
+        Self { mark, title: title.into(), detail: detail.into(), command: None, link: None, sign_in: None, run: None }
     }
 
-    fn command(mut self, line: impl Into<String>) -> Self {
-        self.command = Some(line.into());
+    /// A line to show, which Maestro can also run for the user.
+    fn run(mut self, shown: &str, line: &'static str) -> Self {
+        debug_assert!(RUN_LINES.contains(&line));
+        self.command = Some(shown.to_string());
+        self.run = Some(line);
         self
     }
 
@@ -63,13 +68,44 @@ impl Guide {
     }
 }
 
+const CURSOR_INSTALL_WINDOWS: &str = "irm 'https://cursor.com/install?win32=true' | iex";
+const CURSOR_INSTALL_UNIX: &str = "curl https://cursor.com/install -fsS | bash";
+// A terminal opened by Maestro has the path Maestro started with, so the
+// folder the installer uses is added for the one command.
+const CURSOR_LOGIN_WINDOWS: &str = "$env:Path += \";$HOME\\.local\\bin\"; agent login";
+const CURSOR_LOGIN_UNIX: &str = "PATH=\"$HOME/.local/bin:$PATH\" agent login";
+const OLLAMA_SERVE: &str = "ollama serve";
+const CLAUDE_STATUS: &str = "claude auth status";
+
+/// Every line Maestro will run in a terminal for a setup step. Each is fixed
+/// here, comes from the tool maker's own documentation, and runs only on the
+/// user's click after being shown. Two of them download and run a maker's
+/// installer; a change to this list is a security change.
+pub const RUN_LINES: &[&str] = &[
+    CURSOR_INSTALL_WINDOWS,
+    CURSOR_INSTALL_UNIX,
+    CURSOR_LOGIN_WINDOWS,
+    CURSOR_LOGIN_UNIX,
+    OLLAMA_SERVE,
+    CLAUDE_STATUS,
+];
+
 /// The line that installs Cursor's command-line agent, from Cursor's own page.
 fn cursor_install() -> (&'static str, &'static str) {
     if cfg!(windows) {
-        ("irm 'https://cursor.com/install?win32=true' | iex", "Paste this into PowerShell.")
+        (CURSOR_INSTALL_WINDOWS, "It is a PowerShell line.")
     } else {
-        ("curl https://cursor.com/install -fsS | bash", "Paste this into a terminal.")
+        (CURSOR_INSTALL_UNIX, "It is a terminal line.")
     }
+}
+
+fn cursor_sign_in() -> Step {
+    Step::new(
+        Mark::NotChecked,
+        "Sign in with your Cursor account",
+        "This opens your browser to approve the sign-in. Maestro cannot check whether it is done yet.",
+    )
+    .run("agent login", if cfg!(windows) { CURSOR_LOGIN_WINDOWS } else { CURSOR_LOGIN_UNIX })
 }
 
 fn on_maestro(name: &str) -> Step {
@@ -119,7 +155,7 @@ pub fn guide(service: &Service) -> Option<Guide> {
                     "See what it reports",
                     "Paste this into a terminal. If it says you are not signed in, run `claude auth login`, then press Check again.",
                 )
-                .command("claude auth status"),
+                .run(CLAUDE_STATUS, CLAUDE_STATUS),
             ],
         ),
         ("claude-code", State::Ready) => {
@@ -166,19 +202,8 @@ pub fn guide(service: &Service) -> Option<Guide> {
                              `agent`, can. {where_to} It downloads and runs Cursor's own installer."
                         ),
                     )
-                    .command(line),
-                    Step::new(
-                        Mark::ToDo,
-                        "Restart Maestro, then press Check again",
-                        "The installer puts `agent` in the `.local/bin` folder under your home and adds it to your \
-                         path. Maestro reads the path when it starts, so it has to be restarted to see the new command.",
-                    ),
-                    Step::new(
-                        Mark::NotChecked,
-                        "Sign in with your Cursor account",
-                        "Run this in a terminal once and sign in when it asks. Maestro cannot check this yet.",
-                    )
-                    .command("agent"),
+                    .run(line, line),
+                    cursor_sign_in(),
                     on_maestro(name),
                 ],
             )
@@ -187,12 +212,7 @@ pub fn guide(service: &Service) -> Option<Guide> {
             "Cursor's command-line agent is installed. Whether it is signed in is not checked.".to_string(),
             vec![
                 Step::new(Mark::Done, "Install Cursor's command-line agent", found),
-                Step::new(
-                    Mark::NotChecked,
-                    "Sign in with your Cursor account",
-                    "Run this in a terminal once and sign in when it asks. Maestro cannot check this yet.",
-                )
-                .command("agent"),
+                cursor_sign_in(),
                 on_maestro(name),
             ],
         ),
@@ -201,7 +221,7 @@ pub fn guide(service: &Service) -> Option<Guide> {
             vec![
                 Step::new(Mark::Done, "Install Ollama", found),
                 Step::new(Mark::ToDo, "Start it", "Start Ollama from its icon, or paste this into a terminal. Then press Check again.")
-                    .command("ollama serve"),
+                    .run(OLLAMA_SERVE, OLLAMA_SERVE),
                 on_maestro(name),
             ],
         ),
@@ -221,6 +241,41 @@ pub fn guides(services: &[Service], ignored: &[String]) -> Vec<Guide> {
         .collect();
     found.sort_by_key(|g| g.id != "claude-code");
     found
+}
+
+/// What an agent is told when the user asks it to walk them through a setup.
+/// It runs with every step asked first, so each command waits for a yes.
+pub fn helper_brief(guide: &Guide) -> String {
+    use std::fmt::Write as _;
+    let mut out = format!(
+        "You are helping the owner of this computer set up {} so it works with Maestro. Maestro found this: {}\n\nThe steps:\n",
+        guide.name, guide.headline
+    );
+    for (at, step) in guide.steps.iter().enumerate() {
+        let state = match step.mark {
+            Mark::Done => "already done",
+            Mark::ToDo => "to do",
+            Mark::NotChecked => "not known whether done",
+            Mark::OnMaestro => "not for you or the owner: Maestro has not built this yet",
+        };
+        let _ = writeln!(out, "{}. {} ({state}). {}", at + 1, step.title, step.detail);
+        if let Some(line) = step.run.or(step.command.as_deref()) {
+            let _ = writeln!(out, "   The line for it: {line}");
+        }
+        if let Some(link) = step.link {
+            let _ = writeln!(out, "   The page for it: {link}");
+        }
+    }
+    out.push_str(
+        "\nRules:\n\
+         - Take the steps in order, one at a time. Before each command say in one sentence what it does. The owner is asked to allow each command, so keep each one single and plain.\n\
+         - Run only the lines given above, and commands that only look at whether a step worked, such as a version or status check. Do not install anything else, and do not change system or security settings.\n\
+         - Never ask for, read, print or store a password, key or token. Signing in happens in the owner's browser or terminal; when a step needs them, say exactly what to do and wait for them to say it is done.\n\
+         - If a step fails, show the error, say what it most likely means, and stop for the owner. Do not try a different way of installing.\n\
+         - Do not touch a step marked as not for you.\n\
+         - Finish by saying which steps are done, which are left, and that the owner should press Check again in Maestro.",
+    );
+    out
 }
 
 const IGNORED_FILE: &str = "setup-ignored.json";
@@ -283,12 +338,42 @@ mod tests {
     fn an_editor_without_its_agent_gets_every_step_spelled_out() {
         let guide = guide(&service("cursor", "Cursor", State::AgentMissing)).unwrap();
         let marks: Vec<Mark> = guide.steps.iter().map(|s| s.mark).collect();
-        assert_eq!(marks, [Mark::Done, Mark::ToDo, Mark::ToDo, Mark::NotChecked, Mark::OnMaestro]);
-        assert_eq!(guide.left(), 2);
-        let install = guide.steps[1].command.as_deref().unwrap();
+        assert_eq!(marks, [Mark::Done, Mark::ToDo, Mark::NotChecked, Mark::OnMaestro]);
+        assert_eq!(guide.left(), 1);
+        let install = guide.steps[1].run.unwrap();
+        assert_eq!(guide.steps[2].command.as_deref(), Some("agent login"));
         assert!(install.contains("https://cursor.com/install"), "the installer comes from Cursor's own site");
         // The guide never promises more than Maestro can do.
         assert!(guide.steps.last().unwrap().detail.contains("Not built yet"));
+    }
+
+    #[test]
+    fn every_line_maestro_runs_is_on_the_fixed_list_and_comes_from_the_maker() {
+        let states = [State::Ready, State::SignIn, State::Missing, State::Stopped, State::AgentMissing, State::Unknown];
+        for (id, name) in [("claude-code", "Claude Code"), ("cursor", "Cursor"), ("ollama", "Ollama"), ("codex", "Codex")] {
+            for state in states {
+                for step in guide(&service(id, name, state)).into_iter().flat_map(|g| g.steps) {
+                    if let Some(line) = step.run {
+                        assert!(RUN_LINES.contains(&line), "{line} is run but not listed");
+                        assert!(step.command.is_some(), "a line that can be run is always shown");
+                    }
+                }
+            }
+        }
+        // A line that fetches anything fetches it from the tool's own maker, over https.
+        for line in RUN_LINES.iter().filter(|l| l.contains("://")) {
+            assert!(line.contains("https://cursor.com/install"), "{line}");
+            assert_eq!(line.matches("://").count(), 1, "{line}");
+        }
+        assert!(crate::services::run_setup_line("echo not listed").is_err());
+    }
+
+    #[test]
+    fn the_agents_brief_keeps_it_to_the_listed_steps() {
+        let brief = helper_brief(&guide(&service("cursor", "Cursor", State::AgentMissing)).unwrap());
+        for must in ["cursor.com/install", "already done", "Never ask for, read, print or store a password", "Run only the lines given above", "Do not install anything else", "not for you"] {
+            assert!(brief.contains(must), "the brief no longer says: {must}");
+        }
     }
 
     #[test]

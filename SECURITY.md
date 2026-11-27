@@ -27,6 +27,10 @@ These are the rules the code keeps today. A change that breaks one is a security
 
 The Optimize page hands a report on the machine to an agent you are signed in to, which is the one time Maestro's own data leaves the computer, and it goes only when you click **Run the analysis**. The report is shown first. It holds hardware, firmware and driver versions, settings and program names, and lines naming a user, a computer or a serial number are taken out. The agent runs in an empty folder with every step that needs permission refused, so it can advise and nothing else. The rules it is given are in `RULES` in [src/optimize.rs](src/optimize.rs); a change to them changes what every user is advised to do, and should be reviewed as a security change.
 
+## Setup steps
+
+A setup guide can run a step for the user. It runs only lines from the fixed list `RUN_LINES` in [src/setup.rs](src/setup.rs), only after showing the line and getting a yes, and in a terminal the user can see. Two of those lines download and run a tool maker's own installer over https, which is the only place Maestro causes anything to be downloaded. A test fails if a guide offers a line that is not on the list, or if a line fetches from anywhere but the maker's site. Adding or changing a line is a security change.
+
 ## How changes are checked
 
 Rules 1, 3, 4, 5 and 8 are checked by tests in [src/guard.rs](src/guard.rs), which run with `cargo test` and on every pull request. Each sensitive thing the code does is on a list in that file: every program it starts, every command line built from text, every use of the network, every file with `unsafe` code, every crate. The tests fail when the code and its list differ.

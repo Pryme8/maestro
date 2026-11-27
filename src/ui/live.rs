@@ -1127,6 +1127,20 @@ impl LiveUi {
         });
     }
 
+    /// Start a session that asks before every step, attach it and show it.
+    pub(super) fn start_helper(
+        &mut self,
+        folder: &std::path::Path,
+        prompt: &str,
+        wake: impl Fn() + Send + Sync + 'static,
+    ) -> Result<(), String> {
+        let who = self.login.as_deref().and_then(|name| crate::logins::Logins::load().find(name).cloned());
+        let run = Run::start(self.feed.clone(), folder, prompt, Leave::AskFirst, &self.model, who.as_ref(), wake)?;
+        self.selected = Some(run.id.clone());
+        self.runs.push(Attached { run, paused: false, safe: None, changes: None, confirm_rollback: false });
+        Ok(())
+    }
+
     /// Each tool as last checked.
     pub(super) fn services_now(&self) -> Vec<Service> {
         self.services.lock().map(|list| list.clone()).unwrap_or_default()

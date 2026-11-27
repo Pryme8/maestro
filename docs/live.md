@@ -133,6 +133,14 @@ A program started from the macOS Finder or Dock does not get the `PATH` your ter
 
 When an agent tool is on this computer but cannot be used, a strip marked **NOT SET UP** runs across every page, with a button for each such tool. The button opens a guide: every step in order, the ones already done ticked, the next one outlined, the exact line to paste where there is one, and **Check again** to tick off what you have just done. A step Maestro cannot check says so, and a step that is waiting on Maestro itself says that too.
 
+Maestro can do most steps for you:
+
+- **Do it for me** on a step shows the exact line, and on **Yes, run it** opens a terminal you can see and runs that line in it. The lines are fixed in Maestro's code and come from the tool maker's own documentation; two of them download and run Cursor's installer from cursor.com. Each run is written to the action log.
+- After a step is started this way, Maestro looks at the computer again every few seconds for five minutes and ticks the step when it is done. A command an installer has just added is found without restarting Maestro.
+- **Have an agent walk me through it** starts a Claude Code session with the steps and a set of rules: one step at a time, only the listed lines and checks, never a password or key, stop on an error. It asks before every command on this page, where you allow or refuse each one and can answer it.
+
+Signing in is always finished by you, in your browser or the terminal. Maestro never types or sees a password.
+
 Today it covers Claude Code not installed or not signed in, a named sign-in that is not ready, the Cursor editor without Cursor's command-line agent, and Ollama installed but not running. **Not now** puts the strip away until Maestro next starts, and **Stop reminding me** in a guide takes that tool off it for good.
 
 ## From the command line
