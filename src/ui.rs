@@ -8,6 +8,7 @@ mod live;
 mod network;
 mod optimize;
 mod router;
+mod setup;
 mod timeline;
 mod views;
 
@@ -113,6 +114,8 @@ pub struct App {
     net: network::NetUi,
     /// What agent sessions are doing, and the runs started from here.
     lv: live::LiveUi,
+    /// Reminders for agent tools that are here but not set up, and their guides.
+    setup: setup::SetupUi,
     /// The Optimize page: the machine's report and what an agent made of it.
     op: optimize::OptimizeUi,
     /// When each process was last busy, kept by the sampling thread.
@@ -151,6 +154,7 @@ impl App {
         select: Option<String>,
         preview_focus: bool,
         prefill: Option<(String, String)>,
+        optimize_run: Option<String>,
     ) -> Self {
         apply_style(&cc.egui_ctx);
 
@@ -221,7 +225,8 @@ impl App {
             names,
             net: network::NetUi::new(),
             lv: live::LiveUi::start(&cc.egui_ctx, prefill),
-            op: Default::default(),
+            op: optimize::OptimizeUi::start(optimize_run),
+            setup: setup::SetupUi::load(),
             stale,
             only_stale: false,
             shot: screenshot.map(|path| Shot {
@@ -283,7 +288,7 @@ impl App {
     /// Screenshot mode: wait for a few samples, save one picture, then close.
     fn handle_screenshot(&mut self, ctx: &egui::Context) {
         let Some(shot) = &mut self.shot else { return };
-        if !shot.requested && self.samples >= 3 {
+        if !shot.requested && self.samples >= 3 && self.op.settled() {
             shot.requested = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
         }
@@ -358,6 +363,7 @@ impl eframe::App for App {
         let found = self.crew.recogniser.find(&snap);
         self.keep_history(&found);
         hud(ctx, &snap, groups.len(), &mut self.page, self.lv.agent_block());
+        self.setup_ui(ctx);
         self.action_log(ctx);
 
         if let Some(name) = self.selected.clone() {

@@ -1127,6 +1127,19 @@ impl LiveUi {
         });
     }
 
+    /// Each tool as last checked.
+    pub(super) fn services_now(&self) -> Vec<Service> {
+        self.services.lock().map(|list| list.clone()).unwrap_or_default()
+    }
+
+    pub(super) fn checking_now(&self) -> bool {
+        self.checking.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn check_again(&mut self, ctx: &egui::Context) {
+        self.check_services(ctx);
+    }
+
     /// Whether an agent can be started for a job that is not on this page, and if not, why.
     pub(super) fn agent_block(&self) -> Option<String> {
         if self.services.lock().map_or(true, |list| list.is_empty()) {

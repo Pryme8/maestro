@@ -65,6 +65,10 @@ Blocking one program on Linux takes a control group for the program and an nftab
 - The report was gathered for real on Windows with `--optimize-report`: firmware, board, memory, drives, drivers, problem devices, power plan and start-up programs all read, in about 15 seconds. The Linux reader compiles and has not been run. The macOS reader is written and has not been compiled or run.
 - Reading the agent's answer has unit tests. The page has not been seen on screen, and no analysis has been run by a real agent yet.
 
+**Setup guides**
+
+- What each guide says has unit tests, and `--setup` printed the right guides on a Windows machine with the Cursor editor and no command-line agent. The strip and the guide window have not been seen on screen.
+
 **Agents**
 
 - The recogniser was run on a machine with Claude Code, the Claude app, Copilot and Ollama. The other agents' rules are untested.
