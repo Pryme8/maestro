@@ -89,9 +89,15 @@ pub fn find_on_path(command: &str, path: &str, endings: &[&str]) -> Option<PathB
 
 fn find(command: &str) -> Option<PathBuf> {
     let mut path = std::env::var("PATH").unwrap_or_default();
-    // Installers for these tools put commands in `.local/bin` under the home
-    // folder. A program already running does not see a path changed since it
-    // started, so that folder is looked in as well.
+    // A program keeps the path it started with, so a command an installer
+    // has just added would not be found. On Windows the path is read again
+    // from where the system keeps it.
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    if let Some(fresh) = crate::winproc::fresh_path() {
+        path.push(';');
+        path.push_str(&fresh);
+    }
+    // Elsewhere, installers for these tools use `.local/bin` under the home folder.
     if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
         let local = PathBuf::from(home).join(".local").join("bin");
         path.push(if cfg!(windows) { ';' } else { ':' });
@@ -349,10 +355,40 @@ fn cursor_editor() -> Option<PathBuf> {
         .or_else(|| find("cursor"))
 }
 
+/// What Cursor's `agent status` says about being signed in, when it can be told.
+pub fn cursor_signed_in(status: &str) -> Option<bool> {
+    let text = status.to_lowercase();
+    if text.contains("not logged in") || text.contains("not authenticated") {
+        Some(false)
+    } else if text.contains("logged in") || text.contains("authenticated") {
+        Some(true)
+    } else {
+        None
+    }
+}
+
 /// Cursor: the editor and its command-line agent are reported separately.
 fn cursor() -> Service {
     let mut service = seen_only("cursor", "Cursor", &["agent", "cursor-agent"], "CURSOR_API_KEY");
     let agent_missing = service.state == State::Missing;
+    // With no key set, the agent itself is asked whether it is signed in.
+    if service.state == State::SignIn {
+        let agent = ["agent", "cursor-agent"].iter().find_map(|c| find(c));
+        let said = agent.as_deref().and_then(|a| output(a, &["status"])).as_deref().and_then(cursor_signed_in);
+        let at = agent.map(|a| a.display().to_string()).unwrap_or_default();
+        match said {
+            Some(true) => {
+                service.state = State::Ready;
+                service.found = format!("Installed at {at}, and it says it is signed in.");
+                service.fix.retain(|line| !line.contains("CURSOR_API_KEY"));
+            }
+            Some(false) => service.found = format!("Installed at {at}, but it says it is not signed in, and CURSOR_API_KEY is not set."),
+            None => {
+                service.state = State::Unknown;
+                service.found = format!("Installed at {at}, but its sign-in state could not be read.");
+            }
+        }
+    }
     match (cursor_editor(), agent_missing) {
         (Some(editor), true) => {
             service.state = State::AgentMissing;
@@ -373,7 +409,7 @@ fn cursor() -> Service {
         (None, _) => {}
     }
     service.how = "Looked for the Cursor editor in the usual install folders, for `agent` or `cursor-agent` \
-                   on the path, and checked whether CURSOR_API_KEY is set (not what it holds)."
+                   on the path, ran `agent status`, and checked whether CURSOR_API_KEY is set (not what it holds)."
         .to_string();
     service
 }

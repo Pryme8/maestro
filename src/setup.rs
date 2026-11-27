@@ -72,7 +72,9 @@ const CURSOR_INSTALL_WINDOWS: &str = "irm 'https://cursor.com/install?win32=true
 const CURSOR_INSTALL_UNIX: &str = "curl https://cursor.com/install -fsS | bash";
 // A terminal opened by Maestro has the path Maestro started with, so the
 // folder the installer uses is added for the one command.
-const CURSOR_LOGIN_WINDOWS: &str = "$env:Path += \";$HOME\\.local\\bin\"; agent login";
+// Windows is asked for the path as it is now, which has the installer's folder in it.
+const CURSOR_LOGIN_WINDOWS: &str =
+    "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); agent login";
 const CURSOR_LOGIN_UNIX: &str = "PATH=\"$HOME/.local/bin:$PATH\" agent login";
 const OLLAMA_SERVE: &str = "ollama serve";
 const CLAUDE_STATUS: &str = "claude auth status";
@@ -99,12 +101,12 @@ fn cursor_install() -> (&'static str, &'static str) {
     }
 }
 
-fn cursor_sign_in() -> Step {
-    Step::new(
-        Mark::NotChecked,
-        "Sign in with your Cursor account",
-        "This opens your browser to approve the sign-in. Maestro cannot check whether it is done yet.",
-    )
+fn cursor_sign_in(mark: Mark) -> Step {
+    let detail = match mark {
+        Mark::NotChecked => "This opens your browser to approve the sign-in. Maestro could not read whether it is done.",
+        _ => "This opens your browser to approve the sign-in. Maestro ticks this when Cursor says you are signed in.",
+    };
+    Step::new(mark, "Sign in with your Cursor account", detail)
     .run("agent login", if cfg!(windows) { CURSOR_LOGIN_WINDOWS } else { CURSOR_LOGIN_UNIX })
 }
 
@@ -203,19 +205,27 @@ pub fn guide(service: &Service) -> Option<Guide> {
                         ),
                     )
                     .run(line, line),
-                    cursor_sign_in(),
+                    cursor_sign_in(Mark::ToDo),
                     on_maestro(name),
                 ],
             )
         }
-        ("cursor", State::SignIn) => (
-            "Cursor's command-line agent is installed. Whether it is signed in is not checked.".to_string(),
-            vec![
-                Step::new(Mark::Done, "Install Cursor's command-line agent", found),
-                cursor_sign_in(),
-                on_maestro(name),
-            ],
-        ),
+        ("cursor", State::SignIn | State::Unknown) => {
+            let known = service.state == State::SignIn;
+            let headline = if known {
+                "Cursor's command-line agent is installed but not signed in."
+            } else {
+                "Cursor's command-line agent is installed. Whether it is signed in could not be read."
+            };
+            (
+                headline.to_string(),
+                vec![
+                    Step::new(Mark::Done, "Install Cursor's command-line agent", found.split(", but ").next().unwrap_or("").to_string()),
+                    cursor_sign_in(if known { Mark::ToDo } else { Mark::NotChecked }),
+                    on_maestro(name),
+                ],
+            )
+        }
         ("ollama", State::Stopped) => (
             "Ollama is installed but not running.".to_string(),
             vec![
@@ -338,8 +348,14 @@ mod tests {
     fn an_editor_without_its_agent_gets_every_step_spelled_out() {
         let guide = guide(&service("cursor", "Cursor", State::AgentMissing)).unwrap();
         let marks: Vec<Mark> = guide.steps.iter().map(|s| s.mark).collect();
-        assert_eq!(marks, [Mark::Done, Mark::ToDo, Mark::NotChecked, Mark::OnMaestro]);
-        assert_eq!(guide.left(), 1);
+        assert_eq!(marks, [Mark::Done, Mark::ToDo, Mark::ToDo, Mark::OnMaestro]);
+        assert_eq!(guide.left(), 2);
+        // Once the agent is in, signing in is the one step left, and it is the user's.
+        let installed = super::guide(&service("cursor", "Cursor", State::SignIn)).unwrap();
+        assert_eq!(installed.steps.iter().map(|s| s.mark).collect::<Vec<_>>(), [Mark::Done, Mark::ToDo, Mark::OnMaestro]);
+        assert_eq!(crate::services::cursor_signed_in("Not logged in"), Some(false));
+        assert_eq!(crate::services::cursor_signed_in("Logged in as someone"), Some(true));
+        assert_eq!(crate::services::cursor_signed_in(""), None);
         let install = guide.steps[1].run.unwrap();
         assert_eq!(guide.steps[2].command.as_deref(), Some("agent login"));
         assert!(install.contains("https://cursor.com/install"), "the installer comes from Cursor's own site");
@@ -422,7 +438,7 @@ mod tests {
         let services = [
             service("cursor", "Cursor", State::AgentMissing),
             // Nothing here is for the user to do, so it is not a reminder.
-            service("cursor-2", "Cursor", State::SignIn),
+            service("cursor", "Cursor", State::Unknown),
             service("ollama", "Ollama", State::Stopped),
             service("claude-code", "Claude Code", State::SignIn),
         ];

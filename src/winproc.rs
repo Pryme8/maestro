@@ -290,3 +290,55 @@ pub fn command_line(pid: u32) -> Option<String> {
         )))
     }
 }
+
+#[link(name = "advapi32")]
+extern "system" {
+    fn RegGetValueW(
+        key: isize,
+        sub_key: *const u16,
+        value: *const u16,
+        flags: u32,
+        kind: *mut u32,
+        data: *mut c_void,
+        size: *mut u32,
+    ) -> i32;
+}
+
+/// One text value from the registry, with `%NAME%` parts filled in. Read-only.
+fn registry_text(root: isize, key: &str, value: &str) -> Option<String> {
+    // Text values only; Windows fills in environment names unless told not to.
+    const RRF_RT_REG_SZ: u32 = 0x2;
+    let wide = |text: &str| text.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let (key, value) = (wide(key), wide(value));
+    let mut size: u32 = 0;
+    // SAFETY: both names end in a zero, and a null buffer asks only for the size.
+    let status = unsafe {
+        RegGetValueW(root, key.as_ptr(), value.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), std::ptr::null_mut(), &mut size)
+    };
+    if status != 0 || size == 0 || size > 1 << 20 {
+        return None;
+    }
+    let mut buffer = vec![0u16; (size as usize).div_ceil(2) + 1];
+    let mut size = (buffer.len() * 2) as u32;
+    // SAFETY: the buffer holds `size` bytes, and Windows writes no more than that.
+    let status = unsafe {
+        RegGetValueW(root, key.as_ptr(), value.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), buffer.as_mut_ptr().cast(), &mut size)
+    };
+    if status != 0 {
+        return None;
+    }
+    let end = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+    Some(String::from_utf16_lossy(&buffer[..end]))
+}
+
+/// The path as Windows holds it now: the system's, then the user's. A
+/// program keeps the path it started with, so this is how a command an
+/// installer has just added is found without a restart.
+pub fn fresh_path() -> Option<String> {
+    const HKEY_CURRENT_USER: isize = 0x8000_0001u32 as i32 as isize;
+    const HKEY_LOCAL_MACHINE: isize = 0x8000_0002u32 as i32 as isize;
+    let system = registry_text(HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment", "Path");
+    let user = registry_text(HKEY_CURRENT_USER, "Environment", "Path");
+    let joined: Vec<String> = [system, user].into_iter().flatten().collect();
+    (!joined.is_empty()).then(|| joined.join(";"))
+}
