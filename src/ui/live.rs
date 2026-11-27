@@ -44,6 +44,8 @@ pub(super) struct LiveUi {
     checking: Arc<AtomicBool>,
     /// The tool a new session is started with.
     tool: live::Tool,
+    /// Open the start form on the next frame.
+    open_form: bool,
     /// The user has read what starting Cursor on a sign-in means, and said yes. Saved.
     cursor_ok: bool,
     /// Show the pictures the selected session writes. Off unless asked for.
@@ -129,6 +131,7 @@ impl LiveUi {
             services: Arc::default(),
             checking: Arc::default(),
             tool: live::Tool::Claude,
+            open_form: false,
             cursor_ok: crate::paths::load(CURSOR_OK_FILE).is_some(),
             preview_on: false,
             preview: None,
@@ -331,10 +334,13 @@ impl App {
         let blocked = lv.block_for(lv.tool);
 
         // Start a run.
-        egui::CollapsingHeader::new(RichText::new("Start a session from here").size(13.0))
+        let mut form = egui::CollapsingHeader::new(RichText::new("Start a session from here").size(13.0))
             .id_salt("live-start")
-            .default_open(lv.prefilled)
-            .show(ui, |ui| {
+            .default_open(lv.prefilled);
+        if std::mem::take(&mut lv.open_form) {
+            form = form.open(Some(true));
+        }
+        form.show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Tool").color(DIM).size(11.0));
                     ui.selectable_value(&mut lv.tool, live::Tool::Claude, "Claude Code");
@@ -1176,6 +1182,12 @@ impl LiveUi {
 
     pub(super) fn check_again(&mut self, ctx: &egui::Context) {
         self.check_services(ctx);
+    }
+
+    /// Show the start form with this tool chosen.
+    pub(super) fn open_start(&mut self, tool: live::Tool) {
+        self.tool = tool;
+        self.open_form = true;
     }
 
     /// Whether a session can be started with this tool, and if not, why.

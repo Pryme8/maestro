@@ -115,143 +115,141 @@ impl App {
         });
         ui.add_space(6.0);
 
-        if found.is_empty() {
-            ui.label(RichText::new("No AI agents are running.").color(DIM));
+        // One card for each agent that is running, then one for each tool
+        // that is installed with nothing running, all drawn the same way.
+        let mut cards: Vec<(Face, Press)> = found
+            .iter()
+            .map(|agent| {
+                let face = Face {
+                    id: agent.kind.id,
+                    label: agent.kind.label,
+                    about: format!("{} · {}", agent.kind.vendor, agent.kind.what),
+                    state: if agent.cpu >= 1.0 { ("working", AMBER) } else { ("idle", DIM) },
+                    line: format!(
+                        "{} running, {} processes, {} helpers  ·  {:.1}% processor  ·  {}",
+                        agent.sessions,
+                        agent.procs.len(),
+                        agent.helpers.len(),
+                        agent.cpu,
+                        bytes(agent.mem)
+                    ),
+                    hover: "Helpers are the shells, tools and scripts the agent has started. \
+                            Their load is counted with the agent's."
+                        .to_string(),
+                    button: Some((
+                        "Show processes".to_string(),
+                        "Opens this agent's program with its files, network and actions.",
+                    )),
+                    attention: false,
+                };
+                (face, Press::Processes(agent.procs.first().map(|p| p.name.clone())))
+            })
+            .collect();
+        {
+            use crate::services::{Reach, State};
+            // The services list and the recogniser name one tool differently.
+            let kind_id = |id: &str| if id == "gemini" { "gemini-cli" } else { id }.to_string();
+            for service in self.lv.services_now() {
+                if service.state == State::Missing || found.iter().any(|a| a.kind.id == kind_id(service.id)) {
+                    continue;
+                }
+                let Some(kind) = crate::agents::KINDS.iter().find(|k| k.id == kind_id(service.id)) else { continue };
+                let steps = crate::setup::guide(&service).map_or(0, |g| g.left());
+                let tool = match service.id {
+                    "claude-code" => Some(crate::live::Tool::Claude),
+                    "cursor" => Some(crate::live::Tool::Cursor),
+                    _ => None,
+                };
+                let (state, line, button, press) = if steps > 0 {
+                    (
+                        ("not set up", AMBER),
+                        "Installed, but it cannot be used yet.".to_string(),
+                        Some((format!("Set up  ·  {steps} to do"), "Shows each step and does most of them for you.")),
+                        Press::SetUp(service.id),
+                    )
+                } else if service.state == State::Ready && service.reach == Reach::Direct && tool.is_some() {
+                    (
+                        ("ready", TEAL),
+                        "Nothing running. Set up and ready to start.".to_string(),
+                        Some(("Start a session".to_string(), "Opens the start form on the Live page with this tool chosen.")),
+                        Press::Start(tool.unwrap_or_default()),
+                    )
+                } else {
+                    (
+                        (service.state.label(), DIM),
+                        "Nothing running. Maestro can see it, but cannot give it work yet.".to_string(),
+                        None,
+                        Press::Nothing,
+                    )
+                };
+                let face = Face {
+                    id: kind.id,
+                    label: kind.label,
+                    about: format!("{} · {}", kind.vendor, kind.what),
+                    state,
+                    line,
+                    hover: service.found.clone(),
+                    button,
+                    attention: steps > 0,
+                };
+                cards.push((face, press));
+            }
         }
-        let mut select = None;
+        if cards.is_empty() {
+            ui.label(RichText::new("No AI agents are running or installed.").color(DIM));
+        }
+        let mut pressed = None;
         // Wrap by hand: framed cards do not wrap on their own. 26 is the
         // frame's margin and border on both sides.
         let per_row = (((ui.available_width() + 10.0) / (CARD_WIDTH + 36.0)).floor() as usize).max(1);
-        for row in found.chunks(per_row) {
+        for row in cards.chunks(per_row) {
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing = vec2(10.0, 10.0);
-                for agent in row {
-                    let spent = today.get(agent.kind.id).copied();
-                    if self.card(ui, agent, spent) {
-                        select = agent.procs.first().map(|p| p.name.clone());
+                for (face, press) in row {
+                    let spent = today.get(face.id).copied();
+                    if self.card(ui, face, spent) {
+                        pressed = Some(press.clone());
                     }
                 }
             });
             ui.add_space(10.0);
         }
-        if let Some(name) = select {
-            self.selected = Some(name);
+        match pressed {
+            Some(Press::Processes(Some(name))) => self.selected = Some(name),
+            Some(Press::Start(tool)) => {
+                self.lv.open_start(tool);
+                self.page = Page::Live;
+            }
+            Some(Press::SetUp(id)) => self.setup.show(id),
+            _ => {}
         }
-        self.idle_tools(ui, found);
 
         self.warn_over_budget(&today);
         self.quests_ui(ui, &lifetime);
         self.help_window(ui.ctx());
     }
 
-    /// Agent tools that are on this computer but have nothing running, so
-    /// they have no card above. Each says where it stands and what Maestro
-    /// can do with it.
-    fn idle_tools(&mut self, ui: &mut Ui, found: &[Agent<'_>]) {
-        use crate::services::{Reach, State};
-        // The services list and the recogniser name one tool differently.
-        let kind_of = |id: &str| if id == "gemini" { "gemini-cli".to_string() } else { id.to_string() };
-        let idle: Vec<crate::services::Service> = self
-            .lv
-            .services_now()
-            .into_iter()
-            .filter(|s| s.state != State::Missing)
-            .filter(|s| !found.iter().any(|a| a.kind.id == kind_of(s.id)))
-            .collect();
-        if idle.is_empty() {
-            return;
-        }
-        let mut guide_for: Option<&'static str> = None;
-        ui.label(RichText::new("Installed, nothing running").color(DIM).size(11.0));
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = vec2(10.0, 10.0);
-            for service in &idle {
-                let steps = crate::setup::guide(service).map_or(0, |g| g.left());
-                let (state, colour) = match service.state {
-                    State::Ready => ("set up", TEAL),
-                    State::Stopped => ("not running", DIM),
-                    _ if steps > 0 => ("not set up", AMBER),
-                    _ => (service.state.label(), DIM),
-                };
-                egui::Frame::new()
-                    .fill(PANEL)
-                    .stroke(Stroke::new(1.0, if steps > 0 { AMBER } else { LINE }))
-                    .corner_radius(CornerRadius::same(6))
-                    .inner_margin(Margin::symmetric(12, 8))
-                    .show(ui, |ui| {
-                        ui.vertical(|ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(RichText::new(service.name).strong().size(14.0));
-                                ui.label(RichText::new(state).color(colour).size(11.0));
-                            })
-                            .response
-                            .on_hover_text(&service.found);
-                            let can = match service.reach {
-                                Reach::Direct => "Maestro can start it: see the Live page.",
-                                Reach::SeenOnly => "Maestro can see it, but cannot give it work yet.",
-                            };
-                            ui.label(RichText::new(can).color(DIM).size(11.0));
-                            if steps > 0
-                                && ui
-                                    .small_button(RichText::new(format!("Set up  ·  {steps} to do")).color(AMBER))
-                                    .clicked()
-                            {
-                                guide_for = Some(service.id);
-                            }
-                        });
-                    });
-            }
-        });
-        ui.add_space(8.0);
-        if let Some(id) = guide_for {
-            self.setup.show(id);
-        }
-    }
-
-    /// One agent's card. Returns true when its processes should be shown.
-    fn card(&mut self, ui: &mut Ui, agent: &Agent<'_>, spent: Option<Totals>) -> bool {
-        let id = agent.kind.id;
+    /// One card. Returns true when its button was pressed.
+    fn card(&mut self, ui: &mut Ui, face: &Face, spent: Option<Totals>) -> bool {
+        let id = face.id;
         let mut show = false;
         egui::Frame::new()
             .fill(PANEL)
-            .stroke(Stroke::new(1.0, LINE))
+            .stroke(Stroke::new(1.0, if face.attention { AMBER } else { LINE }))
             .corner_radius(CornerRadius::same(6))
             .inner_margin(Margin::same(12))
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     ui.set_width(CARD_WIDTH);
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new(agent.kind.label).strong().size(15.0));
-                        ui.label(
-                            RichText::new(format!("{} · {}", agent.kind.vendor, agent.kind.what))
-                                .color(DIM)
-                                .size(11.0),
-                        );
+                        ui.label(RichText::new(face.label).strong().size(15.0));
+                        ui.label(RichText::new(&face.about).color(DIM).size(11.0));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            let (text, colour) = if agent.cpu >= 1.0 {
-                                ("working", AMBER)
-                            } else {
-                                ("idle", DIM)
-                            };
+                            let (text, colour) = face.state;
                             ui.label(RichText::new(text).color(colour).size(11.0));
                         });
                     });
-                    ui.label(
-                        RichText::new(format!(
-                            "{} running, {} processes, {} helpers  ·  {:.1}% processor  ·  {}",
-                            agent.sessions,
-                            agent.procs.len(),
-                            agent.helpers.len(),
-                            agent.cpu,
-                            bytes(agent.mem)
-                        ))
-                        .color(DIM)
-                        .size(11.0),
-                    )
-                    .on_hover_text(
-                        "Helpers are the shells, tools and scripts the agent has started. \
-                         Their load is counted with the agent's.",
-                    );
+                    ui.label(RichText::new(&face.line).color(DIM).size(11.0)).on_hover_text(&face.hover);
 
                     ui.add_space(4.0);
                     let budget = self.ctl.journal.budgets.get(id).copied().unwrap_or(0.0);
@@ -314,10 +312,9 @@ impl App {
                             self.ctl.journal.save();
                             self.crew.warned.remove(id);
                         }
-                        show = ui
-                            .button("Show processes")
-                            .on_hover_text("Opens this agent's program with its files, network and actions.")
-                            .clicked();
+                        if let Some((text, hover)) = &face.button {
+                            show = ui.button(text.as_str()).on_hover_text(*hover).clicked();
+                        }
                     });
                 });
             });
@@ -520,4 +517,29 @@ pub(super) fn count(n: f64) -> String {
     } else {
         format!("{n:.0}")
     }
+}
+
+/// What one Crew card shows, whether the agent is running or only installed.
+struct Face {
+    /// The agent kind's id, which usage and budgets are filed under.
+    id: &'static str,
+    label: &'static str,
+    /// Who makes it and what it is.
+    about: String,
+    state: (&'static str, Color32),
+    line: String,
+    hover: String,
+    /// The button's words and what hovering over it says.
+    button: Option<(String, &'static str)>,
+    /// Outlined, because something is left for the user to do.
+    attention: bool,
+}
+
+/// What pressing a card's button does.
+#[derive(Clone)]
+enum Press {
+    Processes(Option<String>),
+    Start(crate::live::Tool),
+    SetUp(&'static str),
+    Nothing,
 }
