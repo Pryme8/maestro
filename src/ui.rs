@@ -155,6 +155,7 @@ impl App {
         preview_focus: bool,
         prefill: Option<(String, String)>,
         optimize_run: Option<String>,
+        setup_guide: Option<String>,
     ) -> Self {
         apply_style(&cc.egui_ctx);
 
@@ -226,7 +227,7 @@ impl App {
             net: network::NetUi::new(),
             lv: live::LiveUi::start(&cc.egui_ctx, prefill),
             op: optimize::OptimizeUi::start(optimize_run),
-            setup: setup::SetupUi::load(),
+            setup: setup::SetupUi::load(setup_guide),
             stale,
             only_stale: false,
             shot: screenshot.map(|path| Shot {

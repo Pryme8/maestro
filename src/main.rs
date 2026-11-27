@@ -237,6 +237,8 @@ fn main() -> eframe::Result<()> {
     // model as soon as the report is ready, as if the button had been clicked. The
     // report is sent to the agent. With `--screenshot`, the picture waits for the answer.
     let optimize_run = arg_after(&args, "--optimize-run").map(str::to_string);
+    // `--setup-guide <tool>` opens with that tool's setup guide showing, for example `cursor`.
+    let setup_guide = arg_after(&args, "--setup-guide").map(str::to_string);
     let page = if optimize_run.is_some() { ui::Page::Optimize } else { page };
 
     let mut viewport = egui::ViewportBuilder::default()
@@ -253,7 +255,7 @@ fn main() -> eframe::Result<()> {
             viewport,
             ..Default::default()
         },
-        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, tour, view, page, select, preview_focus, prefill.clone(), optimize_run.clone())))),
+        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, tour, view, page, select, preview_focus, prefill.clone(), optimize_run.clone(), setup_guide.clone())))),
     )
 }
 

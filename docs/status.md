@@ -67,7 +67,7 @@ Blocking one program on Linux takes a control group for the program and an nftab
 
 **Setup guides**
 
-- What each guide says has unit tests, and `--setup` printed the right guides on a Windows machine with the Cursor editor and no command-line agent. The strip and the guide window have not been seen on screen.
+- What each guide says has unit tests, and `--setup` printed the right guides on a Windows machine with the Cursor editor and no command-line agent. The strip and the Cursor guide were seen on screen once, drawn as intended; no button in them has been clicked.
 
 **Agents**
 

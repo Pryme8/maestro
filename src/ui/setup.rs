@@ -7,7 +7,7 @@ use crate::setup::{self, Guide, Mark};
 
 pub(super) struct SetupUi {
     /// The tool whose guide is open.
-    open: Option<&'static str>,
+    open: Option<String>,
     /// The banner was put away until Maestro next starts.
     hidden: bool,
     /// Tools the user asked not to be reminded about. Saved.
@@ -16,8 +16,8 @@ pub(super) struct SetupUi {
 }
 
 impl SetupUi {
-    pub(super) fn load() -> Self {
-        Self { open: None, hidden: false, ignored: setup::load_ignored(), problem: None }
+    pub(super) fn load(open: Option<String>) -> Self {
+        Self { open, hidden: false, ignored: setup::load_ignored(), problem: None }
     }
 }
 
@@ -47,7 +47,7 @@ impl App {
                                 .on_hover_text("Shows each step, which are done, and exactly what to do next.")
                                 .clicked()
                             {
-                                self.setup.open = Some(guide.id);
+                                self.setup.open = Some(guide.id.to_string());
                             }
                             ui.add_space(10.0);
                         }
@@ -65,7 +65,7 @@ impl App {
         }
 
         // The guide stays open after its last step is done, to say so.
-        let Some(id) = self.setup.open else { return };
+        let Some(id) = self.setup.open.clone() else { return };
         let Some(service) = services.iter().find(|s| s.id == id) else { return };
         let guide = setup::guide(service);
         let mut open = true;
@@ -170,7 +170,7 @@ impl App {
             self.lv.check_again(ctx);
         }
         if ignore {
-            self.setup.ignored.push(id.to_string());
+            self.setup.ignored.push(id);
             setup::save_ignored(&self.setup.ignored);
             open = false;
         }
