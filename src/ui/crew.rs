@@ -137,10 +137,75 @@ impl App {
         if let Some(name) = select {
             self.selected = Some(name);
         }
+        self.idle_tools(ui, found);
 
         self.warn_over_budget(&today);
         self.quests_ui(ui, &lifetime);
         self.help_window(ui.ctx());
+    }
+
+    /// Agent tools that are on this computer but have nothing running, so
+    /// they have no card above. Each says where it stands and what Maestro
+    /// can do with it.
+    fn idle_tools(&mut self, ui: &mut Ui, found: &[Agent<'_>]) {
+        use crate::services::{Reach, State};
+        // The services list and the recogniser name one tool differently.
+        let kind_of = |id: &str| if id == "gemini" { "gemini-cli".to_string() } else { id.to_string() };
+        let idle: Vec<crate::services::Service> = self
+            .lv
+            .services_now()
+            .into_iter()
+            .filter(|s| s.state != State::Missing)
+            .filter(|s| !found.iter().any(|a| a.kind.id == kind_of(s.id)))
+            .collect();
+        if idle.is_empty() {
+            return;
+        }
+        let mut guide_for: Option<&'static str> = None;
+        ui.label(RichText::new("Installed, nothing running").color(DIM).size(11.0));
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(10.0, 10.0);
+            for service in &idle {
+                let steps = crate::setup::guide(service).map_or(0, |g| g.left());
+                let (state, colour) = match service.state {
+                    State::Ready => ("set up", TEAL),
+                    State::Stopped => ("not running", DIM),
+                    _ if steps > 0 => ("not set up", AMBER),
+                    _ => (service.state.label(), DIM),
+                };
+                egui::Frame::new()
+                    .fill(PANEL)
+                    .stroke(Stroke::new(1.0, if steps > 0 { AMBER } else { LINE }))
+                    .corner_radius(CornerRadius::same(6))
+                    .inner_margin(Margin::symmetric(12, 8))
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new(service.name).strong().size(14.0));
+                                ui.label(RichText::new(state).color(colour).size(11.0));
+                            })
+                            .response
+                            .on_hover_text(&service.found);
+                            let can = match service.reach {
+                                Reach::Direct => "Maestro can start it: see the Live page.",
+                                Reach::SeenOnly => "Maestro can see it, but cannot give it work yet.",
+                            };
+                            ui.label(RichText::new(can).color(DIM).size(11.0));
+                            if steps > 0
+                                && ui
+                                    .small_button(RichText::new(format!("Set up  ·  {steps} to do")).color(AMBER))
+                                    .clicked()
+                            {
+                                guide_for = Some(service.id);
+                            }
+                        });
+                    });
+            }
+        });
+        ui.add_space(8.0);
+        if let Some(id) = guide_for {
+            self.setup.show(id);
+        }
     }
 
     /// One agent's card. Returns true when its processes should be shown.

@@ -36,6 +36,13 @@ impl SetupUi {
     }
 }
 
+impl SetupUi {
+    /// Open one tool's guide.
+    pub(super) fn show(&mut self, id: &str) {
+        self.open = Some(id.to_string());
+    }
+}
+
 fn steps_left(guide: &Guide) -> String {
     match guide.left() {
         1 => "1 step left".to_string(),
