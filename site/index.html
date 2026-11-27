@@ -100,9 +100,9 @@
     <article class="card wide">
       <p class="tag">BASE</p>
       <h3>Your machine as a base you can read at a glance</h3>
-      <p>Processor, memory, disks and network every second. Every process grouped by program, with the file on disk behind it and what started it. Draw the same data four ways: tiles, a heat map, a tree of what started what, and a map.</p>
+      <p>Processor, memory, disks, network and graphics every second, with the programs using the graphics card most. Every process grouped by program, with the file on disk behind it and what started it. Draw the same data four ways: tiles, a heat map, a tree of what started what, and a map.</p>
       <p>Each process is sorted in plain words as critical to the system, part of the system, a background service or an app. A program that has touched neither processor nor disk for 15 minutes is counted as cold, and a critical system name running from outside the system folders is flagged, because that is a common disguise.</p>
-      <p class="proof"><b>Tested</b> Seen on screen on Windows with real data. The cold count has unit tests; the stale flags have not yet been seen on screen.</p>
+      <p class="proof"><b>Tested</b> Seen on screen on Windows with real data. The cold count has unit tests; the stale flags have not yet been seen on screen. Graphics is read on Windows, on one machine with one NVIDIA card so far.</p>
     </article>
 
     <article class="card">
@@ -159,12 +159,12 @@
     <article>
       <span class="n">01</span>
       <h3>A live map of every tool call</h3>
-      <p>What was asked, what the agent said, each tool call with the command, file or search in it, and what came back. The most recent is brightest. A failed call turns its tool red.</p>
+      <p>What was asked, what the agent said, each tool call with the command, file or search in it, and what came back. The most recent is brightest. A failed call turns its tool red. Switch on the preview and the pictures the agent writes show up as they change.</p>
     </article>
     <article>
       <span class="n">02</span>
       <h3>Allow or refuse each step</h3>
-      <p>A session started from Maestro asks before every step that needs permission. You see the tool, the exact command or file and why it has to ask. No answer means no. A closed window means no.</p>
+      <p>A session started from Maestro asks before every step that needs permission. You see the tool, the exact command or file and why it has to ask. Allow it once, or allow that one kind of step for the session and take it back whenever you like. No answer means no. A closed window means no.</p>
     </article>
     <article>
       <span class="n">03</span>
@@ -177,7 +177,7 @@
       <p>Keep several Claude Code sign-ins, each in a folder of its own, and pick the account and the model per session. Two accounts never share a sign-in, a setting or a history file.</p>
     </article>
   </div>
-  <p class="proof center"><b>Tested</b> A person drove a full session from the window on Windows: start, allow an edit, refuse a command, pause, resume and stop. A second real account has not been signed in yet, and Live works with Claude Code only today.</p>
+  <p class="proof center"><b>Tested</b> A person drove a full session from the window on Windows: start, allow an edit, refuse a command, pause, resume and stop. Allowing a kind of step for the session was proven by a real run from the command line, and the picture preview has unit tests; neither has been seen on screen yet. A second real account has not been signed in yet, and Live works with Claude Code only today.</p>
 </section>
 
 <section id="trust" class="trust">

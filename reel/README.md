@@ -2,7 +2,7 @@
 
 75 seconds, 1920x1080, 30 frames a second, for YouTube.
 
-`python reel/build.py` renders it from the footage in `reel/footage/`, which git ignores. A shot with no footage gets a stand-in card, and the file is then named `maestro-reel-rough.mp4`. So far only the rough cut has been rendered: no footage has been captured.
+`python reel/build.py` renders it from the footage in `reel/footage/`, which git ignores. A shot with no footage gets a stand-in card, and the file is then named `maestro-reel-rough.mp4`. All thirteen shots have been captured once and the full reel rendered; neither the footage nor the reel is in the repository.
 
 Every shot is the real program. Title cards are plain text on the site's dark background. There is no voice: the words below are on-screen captions, so the reel works with the sound off. They can also be read as a voice-over if you want to record one.
 
@@ -18,7 +18,7 @@ Every shot is the real program. Title cards are plain text on the site's dark ba
 | 6 | 0:27–0:35 | Click a program, press **Clear the machine for this**. The preview list appears with its ticks. | Clear the machine for the task. Nothing pauses until you say so. |
 | 7 | 0:35–0:41 | Network page: connections grouped by program, names and owners filling in. | See who every program is talking to. |
 | 8 | 0:41–0:50 | Live page, a real session: the map grows as tools are called, a ring pulses on the running one. | Watch an agent work, one tool call at a time. |
-| 9 | 0:50–0:57 | Live page: the amber question box. The pointer presses **Refuse**. Cut to a second question, **Allow this once**. | Allow it. Or refuse it. No answer means no. |
+| 9 | 0:50–0:57 | Live page: the amber question box. The pointer presses **Refuse**. Cut to a second question, **Allow this once**, then a third, **Allow … for this session**. | Refuse it. Allow it once, or for the session. No answer means no. |
 | 10 | 0:57–1:02 | Live page: the safe copy line, then **What has it changed?** listing files. | It works in a safe copy you can roll back. |
 | 11 | 1:02–1:08 | Title card, three lines appearing one by one. | No account. No telemetry. Nothing sent off your computer. |
 | 12 | 1:08–1:12 | Title card. | Early. Open from day one. MIT. |
@@ -28,7 +28,9 @@ Captions say only what the documentation says works today. Shot 6 shows the prev
 
 ## Shot list: what has to be captured
 
-The window is 1320x860. It is placed at its own size on the 1920x1080 frame, on the dark background with a soft glow, and pushed in on for detail. It is not stretched to fill the frame, which would blur the text.
+The window is recorded maximised and fills the frame, with the caption on a dark fade over its bottom edge. A smaller recording is placed at its own size on the dark background instead.
+
+Recording the maximised window by its handle gives black frames, so the screen area it covers is recorded: `-f gdigrab -offset_x 0 -offset_y 24 -video_size 1920x1008 -i desktop`. The Live shots are cropped to start below the row that lists every session on the machine, because that row shows the titles of the recorder's other sessions.
 
 | Shots | How it is captured | What it shows of yours |
 |---|---|---|
@@ -74,4 +76,4 @@ There is no music on this machine that is cleared for use, and I have not downlo
 
 ## What is deliberately left out
 
-Router, Timeline and achievements, to keep the reel to 75 seconds. Blocking a program on the network and the stale flags, because the status page says they have not been seen working. macOS, because it has never been compiled.
+Router, Timeline and achievements, to keep the reel to 75 seconds. The preview of pictures a session writes, because the staged session writes none. The graphics panel has no shot of its own: it is on the Base page in shot 4. Blocking a program on the network and the stale flags, because the status page says they have not been seen working. macOS, because it has never been compiled.

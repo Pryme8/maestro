@@ -37,14 +37,14 @@ SHOTS = [
     dict(n="02", kind="card", t=4.0, text="Now agents do the work.", colour=TEAL),
     dict(n="03", kind="card", t=4.0, text="MAESTRO", sub="The resource manager, rebuilt for agents.", colour=TEAL, logo=True),
     dict(n="04", kind="shot", t=8.0, caption="Everything running on your machine. Your agents, found by themselves.", fallback="base.png", zoom=0.06),
-    dict(n="05a", kind="shot", t=1.75, caption="Four views of the same machine.", fade=False),
-    dict(n="05b", kind="shot", t=1.75, caption="Four views of the same machine.", fade=False),
-    dict(n="05c", kind="shot", t=1.75, caption="Four views of the same machine.", fade=False),
-    dict(n="05d", kind="shot", t=1.75, caption="Four views of the same machine.", fade=False),
+    dict(n="05a", kind="shot", t=1.75, ss=1, caption="Four views of the same machine.", fade=False),
+    dict(n="05b", kind="shot", t=1.75, ss=1, caption="Four views of the same machine.", fade=False),
+    dict(n="05c", kind="shot", t=1.75, ss=1, caption="Four views of the same machine.", fade=False),
+    dict(n="05d", kind="shot", t=1.75, ss=1, caption="Four views of the same machine.", fade=False),
     dict(n="06", kind="shot", t=8.0, caption="Clear the machine for the task. Nothing pauses until you say so."),
-    dict(n="07", kind="shot", t=6.0, caption="See who every program is talking to.", zoom=0.04),
+    dict(n="07", kind="shot", t=6.0, ss=0.4, caption="See who every program is talking to.", zoom=0.04),
     dict(n="08", kind="shot", t=9.0, caption="Watch an agent work, one tool call at a time.", fallback="live-map.png", zoom=0.05),
-    dict(n="09", kind="shot", t=7.0, caption="Allow it. Or refuse it. No answer means no."),
+    dict(n="09", kind="shot", t=7.0, caption="Refuse it. Allow it once, or for the session. No answer means no."),
     dict(n="10", kind="shot", t=5.0, caption="It works in a safe copy you can roll back."),
     dict(n="11", kind="card", t=6.0, text="No account.\nNo telemetry.\nNothing sent off your computer."),
     dict(n="12", kind="card", t=4.0, text="Early. Open from day one. MIT.", colour=AMBER),
@@ -87,11 +87,23 @@ def card(shot, bg):
     return path
 
 
-def caption(shot):
+def caption(shot, shade=False):
+    """The caption sheet. With shade, a dark fade sits behind the words, for
+    footage that fills the frame and so runs under them."""
     path = WORK / f"caption{shot['n']}.png"
-    run("magick", "-size", f"{W}x{H}", "xc:none", *words(shot["caption"], BOLD, 46, TEXT, 1700),
+    args = ["magick", "-size", f"{W}x{H}", "xc:none"]
+    if shade:
+        args += ["(", "-size", f"{W}x300", f"gradient:none-{NAVY}", ")", "-gravity", "south", "-composite",
+                 "(", "-size", f"{W}x130", f"xc:{NAVY}", ")", "-gravity", "south", "-composite"]
+    run(*args, *words(shot["caption"], BOLD, 46, TEXT, 1700),
         "-gravity", "south", "-geometry", "+0+46", "-composite", path)
     return path
+
+
+def width_of(source):
+    done = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width",
+                           "-of", "csv=p=0", str(source)], capture_output=True, text=True)
+    return int(done.stdout.strip() or 0)
 
 
 def standin(shot, bg):
@@ -134,17 +146,27 @@ def render_card(shot, picture):
 
 
 def render_shot(shot, bg, source):
-    """The window sits at its own size on the background, with a slow push in."""
+    """The window on the background, with a slow push in."""
     clip = source.suffix != ".png"
     first = ["-ss", shot.get("ss", 0), "-t", shot["t"], "-i", source] if clip else still(source, shot)
     frames = int(shot["t"] * FPS)
     zoom = shot.get("zoom", 0)
     # Fit inside the space above the caption, never enlarging: stretched text blurs.
-    fit = "scale='min(iw,1560)':'min(ih,880)':force_original_aspect_ratio=decrease"
-    graph = (
-        f"[1]{fit},pad=iw+4:ih+4:2:2:color=0x1f2c3a[win];"
-        f"[0][win]overlay=x=(W-w)/2:y=(960-h)/2+10[framed];"
-    )
+    # A recording of the maximised window fills the frame from the top, and
+    # the caption sits over its bottom edge on a dark fade.
+    bleed = width_of(source) >= 1800
+    if bleed:
+        zoom = 0  # a push in would cut the window's edges off
+        graph = (
+            f"[1]scale='min(iw,{W})':'min(ih,{H})':force_original_aspect_ratio=decrease[win];"
+            f"[0][win]overlay=x=(W-w)/2:y='max(0,(900-h)/2)'[framed];"
+        )
+    else:
+        fit = "scale='min(iw,1560)':'min(ih,880)':force_original_aspect_ratio=decrease"
+        graph = (
+            f"[1]{fit},pad=iw+4:ih+4:2:2:color=0x1f2c3a[win];"
+            f"[0][win]overlay=x=(W-w)/2:y=(960-h)/2+10[framed];"
+        )
     if zoom:
         # Zooming a doubled picture keeps the push-in from shaking.
         graph += (
@@ -154,7 +176,7 @@ def render_shot(shot, bg, source):
     else:
         graph += "[framed]null[moved];"
     graph += f"[moved][2]overlay=0:0,format=yuv420p{fades(shot)}[v]"
-    return encode(still(bg, shot) + first + still(caption(shot), shot), graph, shot)
+    return encode(still(bg, shot) + first + still(caption(shot, bleed), shot), graph, shot)
 
 
 def main():
