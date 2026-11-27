@@ -63,7 +63,7 @@ Blocking one program on Linux takes a control group for the program and an nftab
 **Optimize**
 
 - The report was gathered for real on Windows with `--optimize-report`: firmware, board, memory, drives, drivers, problem devices, power plan and start-up programs all read, in about 15 seconds. The Linux and macOS readers compile and have not been run.
-- Reading the agent's answer has unit tests. One analysis was run for real from the page on Windows, read by Claude Code: the agent answered with the list in the form asked for, its first finding being memory running below its rated speed. The maintainer saw the page; what it drew has not been checked against the answer.
+- Reading the agent's answer has unit tests. One analysis was run for real from the page on Windows, read by Claude Code: the agent answered with the list in the form asked for, its first finding being memory running below its rated speed. The maintainer saw the findings drawn on the page and confirmed they looked right.
 
 **Setup guides**
 
