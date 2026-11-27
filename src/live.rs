@@ -222,6 +222,106 @@ pub fn parse_claude(line: &str, now_ms: u64) -> Option<Parsed> {
     (out.session.is_some() || !out.steps.is_empty() || out.title.is_some()).then_some(out)
 }
 
+/// The tools Maestro can start a session with.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub enum Tool {
+    #[default]
+    Claude,
+    Cursor,
+}
+
+impl Tool {
+    pub fn label(self) -> &'static str {
+        match self {
+            Tool::Claude => "Claude Code",
+            Tool::Cursor => "Cursor",
+        }
+    }
+}
+
+/// The arguments for a Cursor run that prints each step. Cursor cannot ask
+/// before a step in this mode: it either may only read, or may change files
+/// in its folder with every command refused. `--force`, which lifts that, is
+/// never passed.
+pub fn cursor_args(leave: Leave) -> Vec<&'static str> {
+    let mut args = vec!["-p", "--output-format", "stream-json", "--trust"];
+    match leave {
+        Leave::ReadOnly | Leave::AskFirst => args.extend(["--mode", "ask"]),
+        Leave::EditFiles => {}
+    }
+    args
+}
+
+/// Read one line of Cursor's step stream.
+pub fn parse_cursor(line: &str, now_ms: u64) -> Option<Parsed> {
+    if line.len() > LINE_LIMIT {
+        return None;
+    }
+    let v: Value = serde_json::from_str(line).ok()?;
+    let kind = v.get("type")?.as_str()?;
+    let subtype = v.get("subtype").and_then(Value::as_str).unwrap_or("");
+    let text_of = |key: &str| v.get(key).and_then(Value::as_str).map(str::to_string);
+    let mut out = Parsed { session: text_of("session_id"), cwd: text_of("cwd"), ..Default::default() };
+    let at_ms = v.get("timestamp_ms").and_then(Value::as_u64).unwrap_or(now_ms);
+    let mut push = |what: What| out.steps.push(Step { at_ms, what });
+    match (kind, subtype) {
+        ("system", "init") => push(What::Start { model: text_of("model").unwrap_or_default() }),
+        // Thinking arrives a few letters at a time; one step when it is done is enough.
+        ("thinking", "completed") => push(What::Thinking),
+        ("assistant", _) => {
+            // With partial output off, each of these is one whole message.
+            let blocks = v.pointer("/message/content").and_then(Value::as_array);
+            for block in blocks.into_iter().flatten() {
+                let text = block.get("text").and_then(Value::as_str).unwrap_or("");
+                if !text.trim().is_empty() {
+                    push(What::Said(clip(text, 4000)));
+                }
+            }
+        }
+        ("tool_call", "started" | "completed") => {
+            let id = text_of("call_id").unwrap_or_default();
+            // The call is one object keyed by the kind of tool: `shellToolCall`, `readToolCall`…
+            let (key, call) = v.get("tool_call").and_then(Value::as_object).and_then(|map| {
+                map.iter().find(|(key, value)| value.is_object() && (key.ends_with("ToolCall") || *key == "function"))
+            })?;
+            let name = match key.strip_suffix("ToolCall") {
+                Some(short) => {
+                    let mut letters = short.chars();
+                    letters.next().map(|c| c.to_uppercase().chain(letters).collect()).unwrap_or_default()
+                }
+                None => call.get("name").and_then(Value::as_str).unwrap_or("tool").to_string(),
+            };
+            if subtype == "started" {
+                push(What::Tool { id, name, detail: detail(call.get("args").unwrap_or(&Value::Null)) });
+            } else {
+                let result = call.get("result").unwrap_or(&Value::Null);
+                let ok = result.get("success").is_some();
+                let text = if ok {
+                    let good = &result["success"];
+                    ["stdout", "content", "message"]
+                        .iter()
+                        .find_map(|key| good.get(*key).and_then(Value::as_str))
+                        .map(str::to_string)
+                        .unwrap_or_else(|| good.to_string())
+                } else {
+                    // A refused or failed call says why under whatever key it has.
+                    result.to_string()
+                };
+                // The call's id for now; `Feed` swaps in the tool's name.
+                push(What::ToolDone { name: id, ok, size: text.len(), preview: clip(&text, 300) });
+            }
+        }
+        ("result", _) => push(What::Finished {
+            ok: !v.get("is_error").and_then(Value::as_bool).unwrap_or(false),
+            // Cursor reports tokens, not a cost.
+            cost: None,
+            text: clip(v.get("result").and_then(Value::as_str).unwrap_or(""), 40_000),
+        }),
+        _ => {}
+    }
+    (out.session.is_some() || !out.steps.is_empty()).then_some(out)
+}
+
 /// One agent session and what it has done lately.
 pub struct Session {
     pub id: String,
@@ -576,6 +676,7 @@ pub struct Run {
     stdin: Arc<Mutex<Option<ChildStdin>>>,
     feed: Arc<Mutex<Feed>>,
     requests: u32,
+    pub tool: Tool,
 }
 
 /// The arguments for a run that reports every step and takes messages while
@@ -659,6 +760,22 @@ impl Run {
         who: Option<&crate::logins::Login>,
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Result<Run, String> {
+        Self::start_with(Tool::Claude, feed, cwd, prompt, leave, model, who, wake)
+    }
+
+    /// Start a session with the given tool. Cursor takes its request once and
+    /// cannot be told more or asked to wait; it runs under its own sign-in.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_with(
+        tool: Tool,
+        feed: Arc<Mutex<Feed>>,
+        cwd: &Path,
+        prompt: &str,
+        leave: Leave,
+        model: &str,
+        who: Option<&crate::logins::Login>,
+        wake: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Run, String> {
         let model = model_arg(model)?;
         // The sign-in is fixed here, for the whole life of the session.
         let env = match who {
@@ -671,9 +788,24 @@ impl Run {
         if prompt.trim().is_empty() {
             return Err("There is nothing to ask.".to_string());
         }
-        let mut command = Command::new("claude");
+        let mut command = match tool {
+            Tool::Claude => {
+                let mut command = Command::new("claude");
+                command.args(claude_args(leave));
+                command
+            }
+            Tool::Cursor => {
+                if who.is_some() {
+                    return Err("Named sign-ins are for Claude Code. Cursor runs under its own sign-in.".to_string());
+                }
+                let agent = crate::services::cursor_agent()
+                    .ok_or("Cursor's command-line agent is not installed. Use Set up Cursor at the top of the window.")?;
+                let mut command = Command::new(agent);
+                command.args(cursor_args(leave));
+                command
+            }
+        };
         command
-            .args(claude_args(leave))
             .args(model.iter().flat_map(|name| ["--model", name.as_str()]))
             .envs(env.iter().map(|(k, v)| (k, v)))
             .current_dir(cwd)
@@ -688,7 +820,7 @@ impl Run {
             command.creation_flags(CREATE_NO_WINDOW);
         }
         let mut child = command.spawn().map_err(|e| {
-            format!("Could not start Claude Code. Is the `claude` command installed and on the path? ({e})")
+            format!("Could not start {}. Is its command installed and on the path? ({e})", tool.label())
         })?;
         let number = RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let id = format!("maestro-run-{number}");
@@ -698,7 +830,8 @@ impl Run {
             let mut first = one_step(What::Asked(clip(prompt, 2000)));
             first.cwd = Some(cwd.to_string_lossy().into_owned());
             let under = who.map(|l| format!(" as {}", l.name)).unwrap_or_default();
-            first.title = Some(format!("Run {number}{under}: {}", clip(prompt, 40)));
+            let with = if tool == Tool::Cursor { " on Cursor" } else { "" };
+            first.title = Some(format!("Run {number}{with}{under}: {}", clip(prompt, 40)));
             feed.add(&id, true, first);
         }
 
@@ -708,8 +841,9 @@ impl Run {
             let stdin = stdin.clone();
             std::thread::spawn(move || {
                 for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                    // A question about a step, or the tool taking one back.
-                    if let Some(control) = parse_control(&line, now_ms()) {
+                    // A question about a step, or the tool taking one back. Only Claude Code asks.
+                    let control = if tool == Tool::Claude { parse_control(&line, now_ms()) } else { None };
+                    if let Some(control) = control {
                         // A question a standing yes covers is answered here,
                         // at once, whether or not the window is being drawn.
                         let covered = match feed.lock() {
@@ -734,7 +868,11 @@ impl Run {
                         wake();
                         continue;
                     }
-                    let Some(mut parsed) = parse_claude(&line, now_ms()) else { continue };
+                    let parsed = match tool {
+                        Tool::Claude => parse_claude(&line, now_ms()),
+                        Tool::Cursor => parse_cursor(&line, now_ms()),
+                    };
+                    let Some(mut parsed) = parsed else { continue };
                     // What was asked is added when it is sent, so it is not taken from the echo.
                     parsed.steps.retain(|s| !matches!(s.what, What::Asked(_)));
                     parsed.title = None;
@@ -774,8 +912,16 @@ impl Run {
             child,
             feed,
             requests: 0,
+            tool,
         };
-        run.write(&user_line(prompt))?;
+        match tool {
+            Tool::Claude => run.write(&user_line(prompt))?,
+            // Cursor reads its request to the end of its input, so the input is closed after it.
+            Tool::Cursor => {
+                run.write(prompt)?;
+                run.finish();
+            }
+        }
         Ok(run)
     }
 
@@ -883,6 +1029,21 @@ impl Run {
     pub fn stop(&mut self) {
         if let Ok(mut stdin) = self.stdin.lock() {
             *stdin = None;
+        }
+        // Cursor's command is a launcher that starts the real program, so
+        // what it started has to be ended too, or it would carry on unseen.
+        if self.tool == Tool::Cursor && matches!(self.child.try_wait(), Ok(None)) {
+            let snap = crate::telemetry::Sampler::new().sample();
+            let mut family = vec![self.pid];
+            let mut at = 0;
+            while at < family.len() {
+                let parent = family[at];
+                family.extend(snap.processes.iter().filter(|p| p.parent_pid == Some(parent)).map(|p| p.pid));
+                at += 1;
+            }
+            for pid in family.into_iter().skip(1).rev() {
+                let _ = crate::control::end(pid);
+            }
         }
         let _ = self.child.kill();
     }
@@ -1298,7 +1459,19 @@ pub fn cli(args: &[String]) -> Option<i32> {
             println!("working in the safe copy {} at {} (snapshot {})", safe.work, safe.path, safe.snapshot);
         }
         let place = safe.as_ref().map_or(folder.as_str(), |s| s.path.as_str());
-        let mut run = match Run::start(feed.clone(), Path::new(place), prompt, leave, model, who, || {}) {
+        // `--tool cursor` runs it with Cursor's agent instead of Claude Code.
+        // Cursor cannot ask before a step: it only reads, unless `--edit-files`
+        // lets it change files in the folder, with every command refused.
+        let tool = match after("--tool").and_then(|i| args.get(i + 1)).map(String::as_str) {
+            Some("cursor") => Tool::Cursor,
+            Some("claude") | None => Tool::Claude,
+            Some(other) => {
+                eprintln!("{other} is not a tool Maestro can start. Use claude or cursor.");
+                return Some(2);
+            }
+        };
+        let leave = if after("--edit-files").is_some() { Leave::EditFiles } else { leave };
+        let mut run = match Run::start_with(tool, feed.clone(), Path::new(place), prompt, leave, model, who, || {}) {
             Ok(run) => run,
             Err(problem) => {
                 eprintln!("{problem}");
@@ -1391,6 +1564,45 @@ pub fn cli(args: &[String]) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cursors_steps_are_read_from_its_own_stream() {
+        let read = |line: &str| parse_cursor(line, 5).map(|p| (p.session, p.steps)).unwrap();
+        let (session, steps) = read(r#"{"type":"system","subtype":"init","cwd":"C:\\w","session_id":"s1","model":"Auto"}"#);
+        assert_eq!(session.as_deref(), Some("s1"));
+        assert_eq!(steps[0].what, What::Start { model: "Auto".into() });
+        // Thinking comes a few letters at a time and is one step when done.
+        assert!(parse_cursor(r#"{"type":"thinking","subtype":"delta","text":"I"}"#, 5).is_none());
+        assert_eq!(read(r#"{"type":"thinking","subtype":"completed","session_id":"s1"}"#).1[0].what, What::Thinking);
+        let (_, steps) = read(
+            r#"{"type":"tool_call","subtype":"started","call_id":"c1","tool_call":{"shellToolCall":{"args":{"command":"git --version"}},"toolCallId":"c1"},"timestamp_ms":77}"#,
+        );
+        assert_eq!(steps[0].what, What::Tool { id: "c1".into(), name: "Shell".into(), detail: "git --version".into() });
+        assert_eq!(steps[0].at_ms, 77);
+        let (_, steps) = read(
+            r#"{"type":"tool_call","subtype":"completed","call_id":"c2","tool_call":{"readToolCall":{"args":{"path":"a.txt"},"result":{"success":{"content":"hello"}}}}}"#,
+        );
+        assert_eq!(steps[0].what, What::ToolDone { name: "c2".into(), ok: true, size: 5, preview: "hello".into() });
+        let (_, steps) = read(
+            r#"{"type":"tool_call","subtype":"completed","call_id":"c1","tool_call":{"shellToolCall":{"args":{},"result":{"rejected":{"reason":"no"}}}}}"#,
+        );
+        assert!(matches!(&steps[0].what, What::ToolDone { ok: false, preview, .. } if preview.contains("rejected")));
+        let (_, steps) = read(r#"{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"s1"}"#);
+        assert_eq!(steps[0].what, What::Finished { ok: true, cost: None, text: "done".into() });
+    }
+
+    #[test]
+    fn a_cursor_run_never_lifts_its_own_limits() {
+        for leave in [Leave::ReadOnly, Leave::AskFirst, Leave::EditFiles] {
+            let args = cursor_args(leave);
+            for never in ["--force", "-f", "--yolo", "--approve-mcps", "--api-key", "--endpoint"] {
+                assert!(!args.contains(&never), "{never} must never be passed");
+            }
+        }
+        // Asking first is not something Cursor can do, so it is given the stricter mode.
+        assert!(cursor_args(Leave::AskFirst).contains(&"ask"));
+        assert!(!cursor_args(Leave::EditFiles).contains(&"ask"));
+    }
 
     #[test]
     fn times_are_read_to_the_millisecond() {

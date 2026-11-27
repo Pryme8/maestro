@@ -91,7 +91,8 @@ Built so far, on the Live page and from the command line:
 
 What the rest takes:
 
-- **Other services.** Codex, Cursor and Gemini each have a scripted mode with an event stream of their own, so each needs a reader like the one for Claude Code. Their terms do not say another program may start them on a subscription login, so those runs would use an API key. Following their sessions started elsewhere needs their session files located and read, which has not been looked into.
+- **Cursor.** Built: Maestro starts Cursor's command-line agent and follows its steps. Cursor cannot ask before a step, be told more, or be interrupted, so a run is either read-only or may edit files in its folder with every command refused. Its terms do not say another program may start it on a subscription login; the maintainer chose to allow that after a one-time warning, recorded in [research/relay.md](research/relay.md).
+- **Other services.** Codex and Gemini each have a scripted mode with an event stream of their own, so each needs a reader like the ones for Claude Code and Cursor. Their terms do not say another program may start them on a subscription login, so those runs would use an API key. Following their sessions started elsewhere needs their session files located and read, which has not been looked into.
 - **More in the map.** It shows tools and what they touched. Still to add: sub-agents as their own nodes, what flowed back from each call, clicking a node to filter the list to it, and stepping in from the map itself.
 - **Acting on a watched session.** A session started elsewhere is matched to its process only by eye, on the Base page. Tying each session file to its process would put Pause and End on the Live page for those too.
 - **Routes.** The router's routes become runs here: the first tool's result, compacted into a brief, becomes the second tool's first message.

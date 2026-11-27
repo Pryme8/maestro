@@ -363,7 +363,7 @@ impl eframe::App for App {
         }
         let found = self.crew.recogniser.find(&snap);
         self.keep_history(&found);
-        hud(ctx, &snap, groups.len(), &mut self.page, self.lv.agent_block());
+        hud(ctx, &snap, groups.len(), &mut self.page, self.lv.any_agent_block());
         self.setup_ui(ctx);
         self.action_log(ctx);
 

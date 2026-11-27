@@ -12,6 +12,8 @@ pub(super) struct OptimizeUi {
     machine: Option<String>,
     /// The report as it will be sent, or as it was.
     report: String,
+    /// The tool that does the reading.
+    tool: live::Tool,
     /// The model the analysis runs on. Empty means the tool's own setting.
     model: String,
     run: Option<Run>,
@@ -129,7 +131,15 @@ impl App {
             }
         }
 
-        let block = lv.agent_block();
+        // If the chosen tool cannot be used and the other can, the other is chosen.
+        if op.run.is_none() && lv.block_for(op.tool).is_some() {
+            for other in [live::Tool::Claude, live::Tool::Cursor] {
+                if lv.block_for(other).is_none() {
+                    op.tool = other;
+                }
+            }
+        }
+        let block = lv.block_for(op.tool);
         ui.horizontal(|ui| {
             if let Some(run) = op.run.as_mut() {
                 ui.spinner();
@@ -146,8 +156,8 @@ impl App {
             let button = ui
                 .add_enabled(ready, egui::Button::new(label))
                 .on_hover_text(
-                    "Sends the report below to Claude Code under the sign-in chosen on the Live page. It \
-                     uses your plan like any other session, and its steps show on the Live page.",
+                    "Sends the report below to the chosen tool under your sign-in. It uses your plan like \
+                     any other session, and its steps show on the Live page.",
                 )
                 .on_disabled_hover_text(block.clone().unwrap_or_else(|| "The machine is still being read.".to_string()));
             let auto = if ready { op.auto.take() } else { None };
@@ -163,13 +173,25 @@ impl App {
                 let folder = crate::paths::data_dir().join("optimize");
                 let _ = std::fs::create_dir_all(&folder);
                 let wake = ui.ctx().clone();
-                match lv.start_advice(&folder, &optimize::prompt(&op.report), &op.model, move || wake.request_repaint()) {
+                // The model names offered are Claude Code's; Cursor uses its own setting.
+                let model = if op.tool == live::Tool::Claude { op.model.as_str() } else { "" };
+                match lv.start_advice(op.tool, &folder, &optimize::prompt(&op.report), model, move || wake.request_repaint()) {
                     Ok(run) => {
                         op.run = Some(run);
                         op.started_ms = now;
                     }
                     Err(err) => op.problem = Some(err),
                 }
+            }
+            ui.label(RichText::new("Read by").color(DIM).size(11.0));
+            for tool in [live::Tool::Claude, live::Tool::Cursor] {
+                let why = lv.block_for(tool);
+                ui.add_enabled_ui(why.is_none(), |ui| ui.selectable_value(&mut op.tool, tool, tool.label()))
+                    .response
+                    .on_disabled_hover_text(why.unwrap_or_default());
+            }
+            if op.tool == live::Tool::Cursor {
+                return;
             }
             ui.label(RichText::new("Model").color(DIM).size(11.0));
             let shown = if op.model.is_empty() { "Claude Code's own setting".to_string() } else { op.model.clone() };

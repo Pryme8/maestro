@@ -42,6 +42,10 @@ pub(super) struct LiveUi {
     /// Each agent tool and whether it can be used.
     services: Arc<Mutex<Vec<Service>>>,
     checking: Arc<AtomicBool>,
+    /// The tool a new session is started with.
+    tool: live::Tool,
+    /// The user has read what starting Cursor on a sign-in means, and said yes. Saved.
+    cursor_ok: bool,
     /// Show the pictures the selected session writes. Off unless asked for.
     preview_on: bool,
     preview: Option<Preview>,
@@ -66,6 +70,9 @@ struct Attached {
     /// Roll back was clicked once and waits for a second click.
     confirm_rollback: bool,
 }
+
+/// Kept once the user has accepted starting Cursor on their sign-in.
+const CURSOR_OK_FILE: &str = "cursor-sign-in-accepted";
 
 /// A session being got ready off the window's thread.
 type Starting = std::sync::mpsc::Receiver<Result<(Run, Option<Safe>), String>>;
@@ -121,6 +128,8 @@ impl LiveUi {
             show_map: false,
             services: Arc::default(),
             checking: Arc::default(),
+            tool: live::Tool::Claude,
+            cursor_ok: crate::paths::load(CURSOR_OK_FILE).is_some(),
             preview_on: false,
             preview: None,
         };
@@ -319,13 +328,24 @@ impl App {
         );
         ui.add_space(6.0);
         lv.services_ui(ui);
-        let blocked = lv.claude_block();
+        let blocked = lv.block_for(lv.tool);
 
         // Start a run.
         egui::CollapsingHeader::new(RichText::new("Start a session from here").size(13.0))
             .id_salt("live-start")
             .default_open(lv.prefilled)
             .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Tool").color(DIM).size(11.0));
+                    ui.selectable_value(&mut lv.tool, live::Tool::Claude, "Claude Code");
+                    ui.selectable_value(&mut lv.tool, live::Tool::Cursor, "Cursor").on_hover_text(
+                        "Cursor's command-line agent, under your Cursor sign-in. It cannot ask before a step \
+                         or be told more once started.",
+                    );
+                });
+                if lv.tool == live::Tool::Cursor {
+                    lv.cursor_note(ui);
+                }
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Folder").color(DIM).size(11.0));
                     ui.add(
@@ -427,9 +447,9 @@ impl App {
                         && !lv.folder.trim().is_empty()
                         && !lv.prompt.trim().is_empty();
                     if ui
-                        .add_enabled(ready, egui::Button::new("Start Claude Code"))
+                        .add_enabled(ready, egui::Button::new(format!("Start {}", lv.tool.label())))
                         .on_hover_text(
-                            "Starts the `claude` command on your own login, with no window. \
+                            "Starts the tool's own command on your own login, with no window. \
                              It uses your plan like any other session.",
                         )
                         .clicked()
@@ -439,9 +459,12 @@ impl App {
                         let folder = lv.folder.trim().to_string();
                         let prompt = lv.prompt.trim().to_string();
                         let model = lv.model.clone();
+                        let tool = lv.tool;
+                        // Named sign-ins are Claude Code's; Cursor has its own.
                         let who = lv
                             .login
                             .as_deref()
+                            .filter(|_| tool == live::Tool::Claude)
                             .and_then(|name| crate::logins::Logins::load().find(name).cloned());
                         let feed = lv.feed.clone();
                         let (tx, rx) = std::sync::mpsc::channel();
@@ -458,7 +481,8 @@ impl App {
                                 }
                                 let place = safe.as_ref().map_or(folder.as_str(), |s| s.path.as_str());
                                 let waker = wake.clone();
-                                let run = Run::start(
+                                let run = Run::start_with(
+                                    tool,
                                     feed,
                                     std::path::Path::new(place),
                                     &prompt,
@@ -494,7 +518,7 @@ impl App {
                         Some(safe) => format!("the safe copy {} (snapshot {})", safe.work, safe.snapshot),
                         None => lv.folder.trim().to_string(),
                     };
-                    self.ctl.note(format!("Started Claude Code in {place}"), true, None);
+                    self.ctl.note(format!("Started {} in {place}", run.tool.label()), true, None);
                     lv.selected = Some(run.id.clone());
                     lv.runs.push(Attached {
                         run,
@@ -1154,6 +1178,63 @@ impl LiveUi {
         self.check_services(ctx);
     }
 
+    /// Whether a session can be started with this tool, and if not, why.
+    pub(super) fn block_for(&self, tool: live::Tool) -> Option<String> {
+        match tool {
+            live::Tool::Claude => self.claude_block(),
+            live::Tool::Cursor => self.cursor_block(),
+        }
+    }
+
+    fn cursor_block(&self) -> Option<String> {
+        let list = self.services.lock().ok()?;
+        let cursor = list.iter().find(|s| s.id == "cursor")?;
+        if cursor.state != services::State::Ready {
+            return Some(format!("Cursor: {}. Use Set up Cursor at the top of the window.", cursor.state.label()));
+        }
+        // A key is the way Cursor's own documents give for scripted runs, so it needs no yes.
+        let key = std::env::var_os("CURSOR_API_KEY").is_some_and(|k| !k.is_empty());
+        (!key && !self.cursor_ok).then(|| "Cursor: read the note about its terms and accept it first.".to_string())
+    }
+
+    /// What starting Cursor from here means, and the one-time yes for doing
+    /// it on a sign-in instead of a key.
+    pub(super) fn cursor_note(&mut self, ui: &mut Ui) {
+        ui.label(
+            RichText::new(
+                "Cursor cannot ask before a step. With \"Ask me each time\" or \"Refuse them all\" it may only read \
+                 and search. With \"Let it change files\" it edits files in the folder and every command it tries \
+                 is refused. It takes one request and cannot be told more or interrupted, only stopped.",
+            )
+            .color(DIM)
+            .size(11.0),
+        );
+        let key = std::env::var_os("CURSOR_API_KEY").is_some_and(|k| !k.is_empty());
+        if key || self.cursor_ok {
+            return;
+        }
+        ui.label(
+            RichText::new(
+                "Before the first run: Cursor's documents say to use an API key for scripted runs, its terms do not \
+                 cover another program starting it on a subscription sign-in, and its acceptable use policy bars \
+                 automated access. Starting it from Maestro on your sign-in is your choice and at your account's risk. \
+                 Setting CURSOR_API_KEY and restarting Maestro avoids the question.",
+            )
+            .color(AMBER)
+            .size(11.0),
+        );
+        if ui.button("I understand. Allow Cursor on my sign-in").clicked() {
+            crate::paths::save(CURSOR_OK_FILE, "accepted");
+            self.cursor_ok = true;
+        }
+    }
+
+    /// Whether any tool can be started, and if none, why.
+    pub(super) fn any_agent_block(&self) -> Option<String> {
+        let claude = self.agent_block()?;
+        self.cursor_block().map(|_| claude)
+    }
+
     /// Whether an agent can be started for a job that is not on this page, and if not, why.
     pub(super) fn agent_block(&self) -> Option<String> {
         if self.services.lock().map_or(true, |list| list.is_empty()) {
@@ -1170,13 +1251,18 @@ impl LiveUi {
     /// Start a session that may only read and answer, under the sign-in chosen on this page.
     pub(super) fn start_advice(
         &self,
+        tool: live::Tool,
         folder: &std::path::Path,
         prompt: &str,
         model: &str,
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Result<Run, String> {
-        let who = self.login.as_deref().and_then(|name| crate::logins::Logins::load().find(name).cloned());
-        Run::start(self.feed.clone(), folder, prompt, Leave::ReadOnly, model, who.as_ref(), wake)
+        let who = self
+            .login
+            .as_deref()
+            .filter(|_| tool == live::Tool::Claude)
+            .and_then(|name| crate::logins::Logins::load().find(name).cloned());
+        Run::start_with(tool, self.feed.clone(), folder, prompt, Leave::ReadOnly, model, who.as_ref(), wake)
     }
 
     /// The answer a session finished with, if it has: whether it went well, its cost and its words.

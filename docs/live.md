@@ -27,6 +27,20 @@ Give a folder and a request, and Maestro starts Claude Code there with no window
 
 **By default it asks you before every step that needs permission.** You can instead let it change files in its folder and be asked about the rest, or have every such step refused so it can only read and search. See [Approving each step](#approving-each-step). You can also choose which [account](#more-than-one-account) and which model the session uses.
 
+## Starting a session with Cursor
+
+The start form has a **Tool** choice: Claude Code or Cursor. Cursor needs its command-line agent installed and signed in; the strip at the top of the window walks you through that.
+
+Cursor works differently from Claude Code, and Maestro does not hide it:
+
+- **It cannot ask before a step.** With "Ask me each time" or "Refuse them all" it may only read and search. With "Let it change files" it edits files in the folder, and every command it tries is refused. Maestro never gives it leave to run everything.
+- **It takes one request.** It cannot be told more or interrupted once started, only stopped.
+- **It reports tokens, not a cost,** so no cost shows for its runs.
+- **Named sign-ins and the model list are Claude Code's.** Cursor runs under its own sign-in, on its own model setting unless you type a model's name.
+- **Sessions started in Cursor itself are not followed yet.** Only ones started here show.
+
+Before the first run on a browser sign-in, Maestro shows a note and asks for a yes: Cursor's documents say to use an API key for scripted runs, and its terms do not cover another program starting it on a subscription. With `CURSOR_API_KEY` set, nothing is asked. From the command line: `--run <folder> "<request>" --tool cursor`, with `--edit-files` to let it change files.
+
 ## The map
 
 Each session can be shown as a map or as a list.

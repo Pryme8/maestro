@@ -57,13 +57,15 @@ Where the terms do not address a launched tool on a subscription login, Maestro 
 - `agent -p "<prompt>"`. The program is called `agent` in the current documents.
 - `--output-format json` ([output format](https://cursor.com/docs/cli/reference/output-format) [P]). The final text is in `result`, with `is_error`, `duration_ms` and `session_id`. There is no usage or cost field.
 - `--workspace <path>` sets the working directory.
-- Permissions: the two readings differ. One read that this mode writes to files in the workspace without being asked and rejects only writes outside it, shell commands that are not allowed, and web fetches. The other read that anything needing approval is rejected. Both agree `--force` lifts the limit. This needs a test before a relay relies on it.
+- Permissions, tested on Windows with version 2026.11.22: without `--force`, this mode wrote a new file and edited an existing one in the workspace without being asked, and rejected a shell command (`git --version`) both times it was tried. `--mode ask` is read-only, and in that mode the agent searched and read outside the workspace folder. Maestro never passes `--force`.
+- The request can be given on standard input instead of as an argument. The step stream has `thinking`, `tool_call` (keyed by kind: `shellToolCall`, `readToolCall`, `editToolCall`, `globToolCall`) and a `result` with token counts and no cost.
 - `--model` picks the model. Exit codes are not documented. An administrator can disable this mode for a team.
 
 **Terms** ([authentication](https://cursor.com/docs/cli/reference/authentication) [P], [terms of service](https://cursor.com/terms-of-service) [P], updated 2026-09-03)
 
 - Browser sign-in is recommended for people; for automation, scripts and CI the documents say to use an API key.
 - The [acceptable use policy](https://cursor.com/acceptable-use-policy) [P], updated 2026-08-11, prohibits reaching the service by automated or non-human means, with no exception for the command-line tool. On its face that conflicts with Cursor's own documents for this mode, API key or not.
+- **Decision, 2026-11-27:** the maintainer chose to let Maestro start Cursor on a browser sign-in as well as on a key. The terms have not changed and the question below is still open, so Maestro shows what is written here and asks for a one-time yes before the first run on a sign-in. With `CURSOR_API_KEY` set, nothing is asked.
 - Starting the tool from another program is not addressed in the terms. Two forum replies from someone who appears to be Cursor staff point both ways: using a subscription outside official clients can trigger enforcement ([thread](https://forum.cursor.com/t/does-using-oh-my-pi-s-cursor-provider-or-an-openai-compatible-proxy-to-the-same-endpoints-violate-cursor-s-tos/167778) [P]), and the command-line tool is built for scripted use ([thread](https://forum.cursor.com/t/bot-as-the-orchestrator-of-local-clis/169588) [P]). Forum replies are not policy.
 
 ## Gemini CLI (Google)

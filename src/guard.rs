@@ -28,6 +28,7 @@ mod tests {
         ("control.rs", "\"pkexec\"", "the Linux permission prompt for adapter actions"),
         ("environment.rs", "name", "only ever \"git\" or \"wsl.exe\", from the two callers in that file"),
         ("live.rs", "\"claude\"", "the unmodified Claude Code command, for a session the user starts"),
+        ("live.rs", "agent", "Cursor's own launcher, found on the path by services::cursor_agent, for a session the user starts; never with --force"),
         ("optimize.rs", "program", "only \"powershell\" on Windows, or the system profiler and pmset on macOS, each with fixed arguments that only read"),
         ("safe.rs", "\"git\"", "test code only"),
         ("services.rs", "program", "a tool found on the path, asked only for its version or sign-in state"),

@@ -4,7 +4,7 @@ The **Optimize** button sits beside the pages at the top of the window. It gathe
 
 ## What you need
 
-An agent Maestro can start. Today that is Claude Code, signed in or with a key set. Until one is ready the button is grey, and hovering over it says what to do: activate one under **Services** on the [Live](live.md) page. The analysis runs under the sign-in chosen there.
+An agent Maestro can start: Claude Code or Cursor, signed in. **Read by** on the page picks which. Until one is ready the button is grey, and hovering over it says what to do: activate one under **Services** on the [Live](live.md) page. The analysis runs under the sign-in chosen there.
 
 ## What happens
 
@@ -37,4 +37,4 @@ The full text is `RULES` in `src/optimize.rs`.
 - The findings are an AI model's reading of a report. Check a firmware or driver step against the maker's own page before you take it.
 - Maestro cannot read settings inside the firmware, such as fan curves or whether a memory profile is on. It infers what it can from what the system reports.
 - Windows is the system this has been run on. On Linux the report is read from files the kernel keeps and has not been run. On macOS it asks the system profiler and has not been compiled or run.
-- Only Claude Code can do the reading today. Other agents need a way for Maestro to start them first.
+- Claude Code and Cursor can do the reading. With Cursor, the read-only mode still lets the agent look at files outside its empty folder if it chooses to; the rules tell it to use only the report. No cost shows for a Cursor run.

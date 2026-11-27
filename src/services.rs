@@ -355,6 +355,12 @@ fn cursor_editor() -> Option<PathBuf> {
         .or_else(|| find("cursor"))
 }
 
+/// Where Cursor's command-line agent is, if it is installed. It is started
+/// by this full path, as Cursor's own launcher, unmodified.
+pub fn cursor_agent() -> Option<PathBuf> {
+    ["agent", "cursor-agent"].iter().find_map(|c| find(c))
+}
+
 /// What Cursor's `agent status` says about being signed in, when it can be told.
 pub fn cursor_signed_in(status: &str) -> Option<bool> {
     let text = status.to_lowercase();
@@ -399,7 +405,7 @@ fn cursor() -> Service {
             service.fix.insert(
                 0,
                 "The editor's window cannot be driven by another program; only the command-line agent can. \
-                 Install it from Cursor's site if you want Maestro to start Cursor runs once that is built."
+                 Use Set up Cursor on the strip at the top to install it."
                     .to_string(),
             );
         }
@@ -407,6 +413,18 @@ fn cursor() -> Service {
             service.found.push_str(&format!(" The Cursor editor is installed at {}.", editor.display()));
         }
         (None, _) => {}
+    }
+    // Cursor can be started from the Live page, so what is said about it differs from the others.
+    service.reach = Reach::Direct;
+    service.fix.retain(|line| !line.contains("cannot start or follow") && !line.contains("This tool's terms"));
+    if !agent_missing {
+        service.fix.push(
+            "Maestro can start Cursor sessions from the Live page. Sessions started in Cursor itself are not followed yet."
+                .to_string(),
+        );
+        if service.state != State::Ready {
+            service.fix.insert(0, "Run `agent login` in a terminal, or use Set up Cursor on the strip at the top.".to_string());
+        }
     }
     service.how = "Looked for the Cursor editor in the usual install folders, for `agent` or `cursor-agent` \
                    on the path, ran `agent status`, and checked whether CURSOR_API_KEY is set (not what it holds)."

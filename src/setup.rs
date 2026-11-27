@@ -206,7 +206,6 @@ pub fn guide(service: &Service) -> Option<Guide> {
                     )
                     .run(line, line),
                     cursor_sign_in(Mark::ToDo),
-                    on_maestro(name),
                 ],
             )
         }
@@ -222,7 +221,6 @@ pub fn guide(service: &Service) -> Option<Guide> {
                 vec![
                     Step::new(Mark::Done, "Install Cursor's command-line agent", found.split(", but ").next().unwrap_or("").to_string()),
                     cursor_sign_in(if known { Mark::ToDo } else { Mark::NotChecked }),
-                    on_maestro(name),
                 ],
             )
         }
@@ -348,19 +346,20 @@ mod tests {
     fn an_editor_without_its_agent_gets_every_step_spelled_out() {
         let guide = guide(&service("cursor", "Cursor", State::AgentMissing)).unwrap();
         let marks: Vec<Mark> = guide.steps.iter().map(|s| s.mark).collect();
-        assert_eq!(marks, [Mark::Done, Mark::ToDo, Mark::ToDo, Mark::OnMaestro]);
+        assert_eq!(marks, [Mark::Done, Mark::ToDo, Mark::ToDo]);
         assert_eq!(guide.left(), 2);
         // Once the agent is in, signing in is the one step left, and it is the user's.
         let installed = super::guide(&service("cursor", "Cursor", State::SignIn)).unwrap();
-        assert_eq!(installed.steps.iter().map(|s| s.mark).collect::<Vec<_>>(), [Mark::Done, Mark::ToDo, Mark::OnMaestro]);
+        assert_eq!(installed.steps.iter().map(|s| s.mark).collect::<Vec<_>>(), [Mark::Done, Mark::ToDo]);
         assert_eq!(crate::services::cursor_signed_in("Not logged in"), Some(false));
         assert_eq!(crate::services::cursor_signed_in("Logged in as someone"), Some(true));
         assert_eq!(crate::services::cursor_signed_in(""), None);
         let install = guide.steps[1].run.unwrap();
         assert_eq!(guide.steps[2].command.as_deref(), Some("agent login"));
         assert!(install.contains("https://cursor.com/install"), "the installer comes from Cursor's own site");
-        // The guide never promises more than Maestro can do.
-        assert!(guide.steps.last().unwrap().detail.contains("Not built yet"));
+        // The guide never promises more than Maestro can do: Ollama still waits on Maestro.
+        let ollama = super::guide(&service("ollama", "Ollama", State::Stopped)).unwrap();
+        assert!(ollama.steps.last().unwrap().detail.contains("Not built yet"));
     }
 
     #[test]
