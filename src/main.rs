@@ -164,6 +164,12 @@ fn main() -> eframe::Result<()> {
         return Ok(());
     }
 
+    // `--version` prints which release this is.
+    if args.iter().any(|a| a == "--version") {
+        println!("maestro {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     // `--setup` prints each agent tool that is here but not set up, and the steps left.
     if args.iter().any(|a| a == "--setup") {
         setup::print();

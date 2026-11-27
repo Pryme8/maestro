@@ -36,5 +36,5 @@ The full text is `RULES` in `src/optimize.rs`.
 
 - The findings are an AI model's reading of a report. Check a firmware or driver step against the maker's own page before you take it.
 - Maestro cannot read settings inside the firmware, such as fan curves or whether a memory profile is on. It infers what it can from what the system reports.
-- Windows is the system this has been run on. On Linux the report is read from files the kernel keeps and has not been run. On macOS it asks the system profiler and has not been compiled or run.
+- Windows is the system this has been run on. On Linux the report is read from files the kernel keeps and has not been run. On macOS it asks the system profiler; that code compiles and has not been run.
 - Claude Code and Cursor can do the reading. With Cursor, the read-only mode still lets the agent look at files outside its empty folder if it chooses to; the rules tell it to use only the report. No cost shows for a Cursor run.

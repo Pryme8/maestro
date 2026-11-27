@@ -18,7 +18,7 @@ jobs:
   build:
     name: Build for ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    # The macOS code has never been compiled. Until it has, a failure there
+    # The macOS app builds, but nobody has opened it on a Mac. Until someone has, a failure there
     # must not hold back the other two. Set `experimental: false` once it builds.
     continue-on-error: ${{ matrix.experimental }}
     strategy:

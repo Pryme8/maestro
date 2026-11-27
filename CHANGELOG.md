@@ -1,10 +1,14 @@
 # Changelog
 
-What changed in each release. No release has been made yet.
+What changed in each release.
 
 ## Unreleased
 
-What the first release will hold. Each item is in a first form; [docs/status.md](docs/status.md) says what has been tested.
+Nothing yet.
+
+## 0.1.0, 2026-11-27
+
+The first release. Each item is in a first form; [docs/status.md](docs/status.md) says what has been tested.
 
 - **Base:** processor, memory, disks, network and graphics every second, every process grouped by program, and four views: tiles, heat map, tree and map.
 - **Sorting:** each process marked critical, part of the system, background service or app. Stale programs flagged as not responding or cold.

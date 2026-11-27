@@ -1,6 +1,6 @@
 # Releasing
 
-For maintainers. A release is a tag, and the downloads are built by GitHub from that tag, so nobody has to build them by hand. No release has been made yet, and this process has not been run end to end.
+For maintainers. A release is a tag, and the downloads are built by GitHub from that tag, so nobody has to build them by hand. The first release, 0.1.0, was made this way on 2026-11-27.
 
 ## What gets built
 
@@ -39,7 +39,7 @@ To take a release back, delete it and its tag on GitHub. People who already down
 
 ## macOS
 
-The macOS code has never been compiled, so the macOS build is marked `experimental` in the workflow: if it fails, the Windows and Linux files are still built and the draft release simply has no macOS file. Once it builds, set `experimental: false` so a broken Mac build is noticed.
+The macOS code first compiled, and passed its tests, on GitHub's Mac on 2026-11-27. Nobody has opened the app on a Mac yet, so the macOS build is still marked `experimental` in the workflow: if it fails, the Windows and Linux files are still built and the draft release simply has no macOS file. Once it builds, set `experimental: false` so a broken Mac build is noticed.
 
 `scripts/bundle-macos.sh` makes the app. It can be run on a Mac by hand:
 
@@ -63,5 +63,4 @@ The certificate and the Apple credentials would be stored as repository secrets 
 
 - An installer or a package for winget, Homebrew or apt.
 - An icon inside `maestro.exe`. The window has the icon; the file in Explorer does not.
-- A `--version` flag, so a person can tell which release they are running.
 - Builds for ARM Windows or ARM Linux.

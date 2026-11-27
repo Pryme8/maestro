@@ -20,6 +20,7 @@ On Windows the release program has no console of its own. It prints into the ter
 | `--view <tiles\|heat\|tree\|mold>` | Opens on that view of the [Base](base.md) page |
 | `--page <base\|timeline\|network\|live\|router>` | Opens on that page |
 | `--select <program>` | Opens with that program's details showing |
+| `--version` | Prints which release this is |
 | `--setup` | Prints each agent tool that is on this computer but not set up, and the steps left |
 | `--optimize-report` | Prints the report the Optimize page would send to an agent. Sends nothing |
 | `--optimize-run <model>` | Opens the Optimize page and runs the analysis on that model once the report is ready, as if the button had been clicked. The report is sent to the agent, and the answer is also printed |

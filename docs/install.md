@@ -4,7 +4,7 @@ Maestro is one native program. It has no installer, no web view and no backgroun
 
 ## Download
 
-There is no published release yet, so for now Maestro has to be built from source (below). When releases exist they will be on the [releases page](https://github.com/Pryme8/maestro/releases):
+Downloads are on the [releases page](https://github.com/Pryme8/maestro/releases). The macOS app is experimental: it builds and passes its tests on GitHub's Mac, and nobody has opened it on a Mac yet.
 
 | System | File | To run it |
 |---|---|---|

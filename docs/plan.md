@@ -173,7 +173,7 @@ The router is phase 5, but a bare ledger and advisor are trialled first as a sta
 1. **Monitor and base:** read-only system telemetry, in the game style.
 2. **Controls:** task profiles that stop what a task does not need, plus process, network and adapter actions, all with undo.
 3. **Agents:** recogniser, telemetry receiver, crew, quests and budgets.
-4. **Depth:** timeline, achievements, account totals, then Linux and macOS. Built, except that macOS has never been compiled and the Linux window has not been seen.
+4. **Depth:** timeline, achievements, account totals, then Linux and macOS. Built, except that the macOS build has only been compiled and tested on GitHub's Mac, never opened by a person, and the Linux window has not been seen.
 5. **Router:** the advisor first, since it only needs the ledger, then the managed environment and the relay. The ledger and advisor are built and the relay is a dry run. The managed environment has works and snapshots; its isolated image comes next, because a relay must not run outside it. It depends on phase 3 only, so it can move ahead of phases 1, 2 and 4 if the trial pays off.
 
 Cursor and Claude adapters are built first. Each phase works on its own, so the build can stop after any of them.

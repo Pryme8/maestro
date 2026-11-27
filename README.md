@@ -29,8 +29,9 @@ Maestro is that agent-centric environment. It runs on top of your existing opera
 | **[Base](docs/base.md)** | Processor, memory, disks, network and graphics every second. Every process, grouped by program, with the file behind it and what started it. Four views of the same data: tiles, a heat map, a tree and a map. Each process sorted as critical, part of the system, background service or app, and stale programs flagged. |
 | **[Controls](docs/controls.md)** | Pause, resume and end a program or everything it started. Clear the machine for a task, with a preview and saved profiles. Block a program on the network and switch an adapter off. An action log with undo. Critical processes are locked, and nothing is ever left frozen. |
 | **[Network](docs/network.md)** | Every connection under the program that opened it, with the name and owner behind each address, and every listening port with whether other computers can reach it. |
-| **[Agents](docs/agents.md)** | Claude Code, Cursor, Codex, Copilot, Gemini CLI, Ollama and others recognised by themselves, with the helpers they start counted in. Usage reports, daily budgets and quests. |
-| **[Live](docs/live.md)** | Watch any Claude Code session step by step. Start one in a safe copy of your repository that can be rolled back, approve or refuse each step it asks to take, send it messages, interrupt it, pause it or stop it. Keep several Claude Code sign-ins apart, such as work and personal, and pick the account and model per session. A map of what each session touched, and the state of each agent tool with the step that fixes what is missing. |
+| **[Agents](docs/agents.md)** | Claude Code, Cursor, Codex, Copilot, Gemini CLI, Ollama and others recognised by themselves, with the helpers they start counted in. Usage reports, daily budgets and quests. A tool that is installed but not set up is flagged on every page, with a guide that does most of the steps for you. |
+| **[Live](docs/live.md)** | Watch any Claude Code session step by step. Start one with Claude Code or Cursor, in a safe copy of your repository that can be rolled back. With Claude Code, approve or refuse each step it asks to take, or allow a kind of step for the session, send it messages, interrupt it, pause it or stop it. Keep several Claude Code sign-ins apart, such as work and personal, and pick the account and model per session. A map of what each session touched, a preview of the pictures it writes, and the state of each agent tool with the step that fixes what is missing. |
+| **[Optimize](docs/optimize.md)** | One button gathers a report on the machine: firmware, drivers, settings, and stale or heavy programs. An agent you are signed in to reads it by a written set of rules and lists what is worth changing. It advises only; nothing is changed. |
 | **[Timeline](docs/timeline.md)** | A day of history, every event, what each agent reported spending, and thirteen achievements. |
 | **[Router](docs/router.md)** | A ledger of your AI accounts and an advisor that proposes the cheapest route for a task. The relay that would run a route only prints its plan. |
 | **[Managed environment](docs/environment.md)** | From the command line: recorded folders, git worktrees with snapshots and rollback. It does not isolate anything yet. |
@@ -39,7 +40,9 @@ Not there yet: running a relay, the isolated image, how much each connection car
 
 ## Get it
 
-There is no release to download yet, so for now it is built from source. You need a [Rust toolchain](https://rustup.rs), version 1.84 or newer.
+Download it from the [releases page](https://github.com/Pryme8/maestro/releases): a zip for Windows, a tarball for Linux and an app for macOS, with checksums. The macOS app is experimental: it builds and passes its tests, and nobody has opened it on a Mac yet. Unpack and run; there is no installer. The downloads are not signed yet, so Windows warns the first time: see [docs/install.md](docs/install.md).
+
+Or build it from source. You need a [Rust toolchain](https://rustup.rs), version 1.84 or newer.
 
 ```
 git clone https://github.com/Pryme8/maestro.git
@@ -47,7 +50,7 @@ cd maestro
 cargo run --release
 ```
 
-Linux needs a few packages first, and macOS needs Apple's command line tools: see [docs/install.md](docs/install.md). Downloads for Windows, macOS and Linux will appear on the [releases page](https://github.com/Pryme8/maestro/releases) once the first release is made.
+Linux needs a few packages first, and macOS needs Apple's command line tools: see [docs/install.md](docs/install.md).
 
 Maestro also works without its window. A few examples, with the full list in [docs/command-line.md](docs/command-line.md):
 

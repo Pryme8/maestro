@@ -62,7 +62,7 @@ Blocking one program on Linux takes a control group for the program and an nftab
 
 **Optimize**
 
-- The report was gathered for real on Windows with `--optimize-report`: firmware, board, memory, drives, drivers, problem devices, power plan and start-up programs all read, in about 15 seconds. The Linux reader compiles and has not been run. The macOS reader is written and has not been compiled or run.
+- The report was gathered for real on Windows with `--optimize-report`: firmware, board, memory, drives, drivers, problem devices, power plan and start-up programs all read, in about 15 seconds. The Linux and macOS readers compile and have not been run.
 - Reading the agent's answer has unit tests. The page has not been seen on screen, and no analysis has been run by a real agent yet.
 
 **Setup guides**
