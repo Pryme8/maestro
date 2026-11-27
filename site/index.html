@@ -124,7 +124,16 @@
       <p class="tag">CREW</p>
       <h3>Your agents, recognised by themselves</h3>
       <p>Claude Code, Cursor, Codex, Copilot, Gemini CLI, Ollama and others are found among the running programs with no setup. The shells and scripts an agent starts are counted with it, so the processor and memory shown are what it is really using.</p>
+      <p>A tool that is installed with nothing running gets a card too, with a button to start a session or to set it up.</p>
       <p class="proof"><b>Tested</b> Run on a machine with Claude Code, the Claude app, Copilot and Ollama. The rules for the other agents are untested.</p>
+    </article>
+
+    <article class="card">
+      <p class="tag">SETUP</p>
+      <h3>A tool that is installed but not ready gets a guide</h3>
+      <p>When an agent tool is on the computer but cannot be used, a strip marked NOT SET UP runs across every page. Its guide lists every step in order, ticks the ones already done and gives the exact line to paste.</p>
+      <p>Maestro can run a step for you: it shows the fixed line, and on your yes runs it in a terminal you can see. Or an agent walks you through, one approved step at a time. Signing in is always finished by you. Maestro never types or sees a password.</p>
+      <p class="proof"><b>Tested</b> Used for real on Windows to install Cursor's command-line agent and sign in to it. The agent walk-through has unit tests and has not been used for real.</p>
     </article>
 
     <article class="card">
@@ -141,13 +150,21 @@
       <p>An action log runs along the bottom of the window with an undo on everything that can be undone. Ending a program takes a second click. Processes the system needs are locked, from the window and the command line alike.</p>
       <p class="proof"><b>Tested</b> The locks and resume-on-close were run against a throwaway process.</p>
     </article>
+
+    <article class="card wide">
+      <p class="tag">OPTIMIZE</p>
+      <h3>One button for a second opinion on the whole machine</h3>
+      <p>Optimize gathers a report on the machine: firmware, drivers, memory, drives, the power plan, what starts with the system, and the stale and heavy programs. You see the report before anything is sent. On your click, an agent you are signed in to, Claude Code or Cursor, reads it and lists what is worth changing, largest gain first, each with its risk, why and how.</p>
+      <p>It advises only: nothing on the machine is changed. The report holds no user name, computer name, serial number or file path. The agent reads it under written rules: never weaken security, no registry cleaners, driver-updaters or tweak scripts, firmware only from the maker's own page, and an empty list is a fair answer.</p>
+      <p class="proof"><b>Tested</b> The report was gathered for real on Windows, in about 15 seconds. Reading the agent's answer has unit tests. No analysis has been run by a real agent yet, and the page has not been seen on screen.</p>
+    </article>
   </div>
 </section>
 
 <section id="live" class="live">
   <p class="label">LIVE</p>
   <h2>Watch an agent think. <em>Decide what it may do.</em></h2>
-  <p class="sub">The Live page starts Claude Code sessions, shows every step as it happens, and puts each risky one in front of you before it runs.</p>
+  <p class="sub">The Live page starts Claude Code sessions, shows every step as it happens, and puts each risky one in front of you before it runs. It can start Cursor's command-line agent too, with tighter limits.</p>
 
   <figure class="shot">
     <div class="chrome"><i></i><i></i><i></i><span>Maestro · Live · map</span></div>
@@ -177,7 +194,20 @@
       <p>Keep several Claude Code sign-ins, each in a folder of its own, and pick the account and the model per session. Two accounts never share a sign-in, a setting or a history file.</p>
     </article>
   </div>
-  <p class="proof center"><b>Tested</b> A person drove a full session from the window on Windows: start, allow an edit, refuse a command, pause, resume and stop. Allowing a kind of step for the session was proven by a real run from the command line, and the picture preview has unit tests; neither has been seen on screen yet. A second real account has not been signed in yet, and Live works with Claude Code only today.</p>
+
+  <div class="note">
+    <h3>Cursor, with its limits stated</h3>
+    <p>Maestro starts Cursor's command-line agent and follows its steps on the same map. Cursor works differently from Claude Code, and Maestro does not hide it:</p>
+    <ul>
+      <li><b>It cannot ask before a step.</b> It either only reads and searches, or edits files in its folder with every command refused. Maestro never gives it leave to run everything.</li>
+      <li><b>It takes one request.</b> It can be stopped, not told more.</li>
+      <li><b>No cost shows</b> for its runs, because it reports tokens only.</li>
+      <li><b>Sessions started inside Cursor are not followed yet.</b> Only the ones started from Maestro show.</li>
+    </ul>
+    <p>Before the first run on a browser sign-in, Maestro shows a note about Cursor's terms and waits for your yes.</p>
+  </div>
+
+  <p class="proof center"><b>Tested</b> A person drove a full Claude Code session from the window on Windows: start, allow an edit, refuse a command, pause, resume and stop. Allowing a kind of step for the session was proven by a real run from the command line, and the picture preview has unit tests; neither has been seen on screen yet. A second real account has not been signed in yet. Two real Cursor runs were driven from the command line on Windows: the file edits were made, the command was refused, and every step showed. Choosing Cursor on the page has not been used yet.</p>
 </section>
 
 <section id="trust" class="trust">
@@ -207,6 +237,7 @@
     <li>It is not an antivirus.</li>
     <li>It cannot measure answer quality. “Best route” means cheapest within your rules.</li>
     <li>A safe copy protects your files, not your machine. That is what approving each step is for.</li>
+    <li>Optimize's findings are an AI model's reading of a report. Check a firmware or driver step against the maker's own page before you take it.</li>
   </ul>
 </section>
 
@@ -222,6 +253,8 @@
         <tr><th>Reads the machine; pause, resume, end</th><td class="y">yes</td><td class="y">yes, from the command line</td><td class="n">written, never run</td></tr>
         <tr><th>The window</th><td class="y">yes</td><td class="n">not seen yet</td><td class="n">not tried</td></tr>
         <tr><th>Follow and direct Claude Code</th><td class="y">yes</td><td class="n">not tried</td><td class="n">written, never run</td></tr>
+        <tr><th>Start and follow Cursor's agent</th><td class="y">yes, from the command line</td><td class="n">not tried</td><td class="n">not tried</td></tr>
+        <tr><th>Gather the Optimize report</th><td class="y">yes</td><td class="n">written, not run</td><td class="n">written, never run</td></tr>
         <tr><th>Block one program on the network</th><td class="n">written, not run</td><td class="n">not built</td><td class="n">not built</td></tr>
       </tbody>
     </table>
