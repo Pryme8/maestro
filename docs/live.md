@@ -129,6 +129,12 @@ A session cannot be started while Claude Code is not ready, and the page says wh
 
 A program started from the macOS Finder or Dock does not get the `PATH` your terminal has. If Maestro reports a tool as not installed on a Mac when it is, start Maestro from a terminal. This has not been checked on a Mac.
 
+## Tools that are here but not set up
+
+When an agent tool is on this computer but cannot be used, a strip marked **NOT SET UP** runs across every page, with a button for each such tool. The button opens a guide: every step in order, the ones already done ticked, the next one outlined, the exact line to paste where there is one, and **Check again** to tick off what you have just done. A step Maestro cannot check says so, and a step that is waiting on Maestro itself says that too.
+
+Today it covers Claude Code not installed or not signed in, a named sign-in that is not ready, the Cursor editor without Cursor's command-line agent, and Ollama installed but not running. **Not now** puts the strip away until Maestro next starts, and **Stop reminding me** in a guide takes that tool off it for good.
+
 ## From the command line
 
 - `--services` prints each tool's state, how it was checked and what to do about it.

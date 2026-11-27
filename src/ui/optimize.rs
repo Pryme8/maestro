@@ -18,6 +18,21 @@ pub(super) struct OptimizeUi {
     started_ms: u64,
     outcome: Option<Outcome>,
     problem: Option<String>,
+    /// Asked for on the command line: run on this model once the report is ready.
+    auto: Option<String>,
+    /// A run was asked for on the command line, so its answer is printed too.
+    wanted: bool,
+}
+
+impl OptimizeUi {
+    pub(super) fn start(auto: Option<String>) -> Self {
+        Self { wanted: auto.is_some(), auto, ..Default::default() }
+    }
+
+    /// Nothing asked for on the command line is still on its way.
+    pub(super) fn settled(&self) -> bool {
+        !self.wanted || self.outcome.is_some() || self.problem.is_some()
+    }
 }
 
 enum Outcome {
@@ -95,6 +110,9 @@ impl App {
         // A run in progress: take its answer when it comes.
         if let Some(run) = op.run.as_mut() {
             if let Some((ok, cost, text)) = lv.answer_of(&run.id) {
+                if op.wanted {
+                    println!("{text}");
+                }
                 if ok {
                     op.outcome = Some(match optimize::read_findings(&text) {
                         Ok(found) => Outcome::Findings(found, cost),
@@ -132,7 +150,11 @@ impl App {
                      uses your plan like any other session, and its steps show on the Live page.",
                 )
                 .on_disabled_hover_text(block.clone().unwrap_or_else(|| "The machine is still being read.".to_string()));
-            if button.clicked() {
+            let auto = if ready { op.auto.take() } else { None };
+            if let Some(model) = &auto {
+                op.model = model.clone();
+            }
+            if button.clicked() || auto.is_some() {
                 op.outcome = None;
                 op.problem = None;
                 if let Some(machine) = &op.machine {

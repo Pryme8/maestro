@@ -38,6 +38,7 @@ mod receiver;
 mod router;
 mod safe;
 mod services;
+mod setup;
 mod stale;
 mod telemetry;
 mod ui;
@@ -163,6 +164,12 @@ fn main() -> eframe::Result<()> {
         return Ok(());
     }
 
+    // `--setup` prints each agent tool that is here but not set up, and the steps left.
+    if args.iter().any(|a| a == "--setup") {
+        setup::print();
+        return Ok(());
+    }
+
     // `--optimize-report` prints the report an analysis would send. Nothing is sent.
     if args.iter().any(|a| a == "--optimize-report") {
         optimize::print_report();
@@ -226,6 +233,12 @@ fn main() -> eframe::Result<()> {
     let select = arg_after(&args, "--select").map(str::to_string);
     let preview_focus = args.iter().any(|a| a == "--preview-focus");
 
+    // `--optimize-run <model>` opens the Optimize page and runs the analysis on that
+    // model as soon as the report is ready, as if the button had been clicked. The
+    // report is sent to the agent. With `--screenshot`, the picture waits for the answer.
+    let optimize_run = arg_after(&args, "--optimize-run").map(str::to_string);
+    let page = if optimize_run.is_some() { ui::Page::Optimize } else { page };
+
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Maestro")
         .with_inner_size([1320.0, 860.0])
@@ -240,7 +253,7 @@ fn main() -> eframe::Result<()> {
             viewport,
             ..Default::default()
         },
-        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, tour, view, page, select, preview_focus, prefill.clone())))),
+        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, screenshot, tour, view, page, select, preview_focus, prefill.clone(), optimize_run.clone())))),
     )
 }
 
